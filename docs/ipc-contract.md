@@ -1,103 +1,91 @@
 # IPC kontrakt (Rust ⇄ React)
 
-Všetky payloady sú camelCase JSON. Volanie: `invoke("command_name", { args })` z `@tauri-apps/api/core`.
-Eventy: `listen("event-name", handler)` z `@tauri-apps/api/event`.
+Payloady používajú camelCase JSON. Frontend volá Rust cez `invoke()` z `@tauri-apps/api/core`; Rust posiela eventy cez Tauri event systém.
 
-## Typy (TypeScript)
+## Dátové typy
 
 ```ts
-export type Provider = "gdrive" | "customCloud";
-export type SyncState = "idle" | "changed" | "syncing" | "synced" | "error";
-export type CompressionLevel = "fast" | "best";
+type Provider = "gdrive" | "customCloud";
+type SyncState = "idle" | "changed" | "syncing" | "synced" | "error";
+type CompressionLevel = "fast" | "best";
 
-export interface WatchedFolder {
+interface WatchedFolder {
   id: string;
   path: string;
   provider: Provider;
+  cloudId: string | null;
+  cloudName: string;
+  autoBackup: boolean | null;
   syncState: SyncState;
-  lastSync: string | null;   // ISO-8601
+  lastSync: string | null;
   lastError: string | null;
+  lastErrorAction: "upload" | "download" | null;
 }
 
-export interface Game {
+interface Game {
   id: string;
   name: string;
   savePath: string;
   provider: Provider;
-  autoUpload: boolean | null; // null = dedí globálne nastavenie
+  autoUpload: boolean | null;
   syncState: SyncState;
   lastChange: string | null;
   lastUpload: string | null;
   lastError: string | null;
 }
 
-export interface ProviderStatus {
-  connected: boolean;
-  account: string | null;   // e-mail / užívateľ
-  endpoint: string | null;  // len customCloud
-  error: string | null;
-}
-
-export interface Settings {
+interface Settings {
   theme: "dark" | "light";
   debounceSeconds: number;
-  autoUploadSaves: boolean;      // globálny slider zap/vyp
+  autoBackupFolders: boolean;
+  autoUploadSaves: boolean;
   compressionLevel: CompressionLevel;
-  gdriveClientId: string;        // OAuth client ID (Desktop app) z Google Cloud Console
-  gdriveClientSecret: string;    // OAuth client secret (Google ho pri Desktop app vyžaduje aj s PKCE)
+  gdriveClientId: string;
 }
 
-export interface AppConfig {
-  watchedFolders: WatchedFolder[];
-  games: Game[];
-  providers: { gdrive: ProviderStatus; customCloud: ProviderStatus };
-  settings: Settings;
-}
-
-export interface VersionInfo {
-  id: string;        // ID súboru na cloude
-  name: string;      // napr. Elden-Ring_2026-07-16_14-30-00.zip
-  createdAt: string; // ISO-8601
+interface CloudFolderBackup {
+  cloudId: string;
+  name: string;
+  modifiedAt: string | null;
+  fileCount: number;
   sizeBytes: number;
-}
-
-export interface SyncProgress {
-  targetType: "folder" | "game";
-  id: string;
-  status: "uploading" | "done" | "error";
-  message: string | null;
+  alreadyConnected: boolean;
 }
 ```
+
+`autoBackup` a `autoUpload`: `null` dedí globálne nastavenie, `true` ho zapína a `false` vypína pre konkrétnu položku.
 
 ## Commands
 
 | Command | Args | Návrat |
 |---|---|---|
 | `get_config` | — | `AppConfig` |
-| `update_settings` | `{ settings: Settings }` | `AppConfig` |
-| `add_watched_folder` | `{ path: string, provider: Provider }` | `AppConfig` |
-| `remove_watched_folder` | `{ id: string }` | `AppConfig` |
-| `add_game` | `{ name: string, savePath: string, provider: Provider }` | `AppConfig` |
-| `remove_game` | `{ id: string }` | `AppConfig` |
-| `set_game_auto_upload` | `{ id: string, value: boolean \| null }` | `AppConfig` |
-| `backup_folder_now` | `{ id: string }` | `AppConfig` (stav po dobehnutí) |
-| `upload_game_save` | `{ id: string }` | `AppConfig` |
-| `list_game_versions` | `{ id: string }` | `VersionInfo[]` |
-| `restore_game_version` | `{ id: string, versionId: string }` | `null` |
-| `gdrive_connect` | — | `AppConfig` (otvorí prehliadač, čaká na OAuth) |
+| `update_settings` | `{ settings }` | `AppConfig` |
+| `add_watched_folder` | `{ path, provider }` | `AppConfig` |
+| `remove_watched_folder` | `{ id }` | `AppConfig` |
+| `set_folder_auto_backup` | `{ id, value }` | `AppConfig` |
+| `backup_folder_now` | `{ id }` | `AppConfig` |
+| `list_folder_backups` | — | `CloudFolderBackup[]` |
+| `connect_folder_backup` | `{ cloudId, path }` | `AppConfig` |
+| `restore_folder_from_cloud` | `{ id }` | `AppConfig` |
+| `add_game` | `{ name, savePath, provider }` | `AppConfig` |
+| `remove_game` | `{ id }` | `AppConfig` |
+| `set_game_auto_upload` | `{ id, value }` | `AppConfig` |
+| `upload_game_save` | `{ id }` | `AppConfig` |
+| `list_game_versions` | `{ id }` | `VersionInfo[]` |
+| `restore_game_version` | `{ id, versionId }` | `null` |
+| `gdrive_connect` | — | `AppConfig` |
 | `gdrive_disconnect` | — | `AppConfig` |
-| `custom_cloud_login` | `{ endpoint: string, username: string, password: string }` | `AppConfig` |
+| `custom_cloud_login` | `{ endpoint, username, password }` | `AppConfig` |
 | `custom_cloud_logout` | — | `AppConfig` |
 
-Chyby: command vráti reject s reťazcom chyby (zobraz v UI, napr. toast/inline).
+Command chyby sú reťazce určené na priame zobrazenie v UI.
 
-Výber priečinka: použiť `open({ directory: true })` z `@tauri-apps/plugin-dialog`.
+## Eventy
 
-## Eventy (Rust → React)
-
-| Event | Payload | Kedy |
+| Event | Payload | Význam |
 |---|---|---|
-| `config-changed` | `AppConfig` | watcher zmenil syncState, dokončený upload, zmena configu na pozadí |
-| `sync-progress` | `SyncProgress` | priebeh uploadu/chyba |
+| `config-changed` | `AppConfig` | Čerstvý uložený stav konfigurácie |
+| `sync-progress` | `SyncProgress` | Priebeh, dokončenie alebo chyba operácie |
 
-UI drží config v state; pri `config-changed` ho nahradí. Po každom command-e s návratom `AppConfig` tiež.
+`SyncProgress.status` je `uploading`, `done` alebo `error`. Hodnota `uploading` znamená všeobecne prebiehajúcu cloudovú operáciu a používa sa aj pri downloade.

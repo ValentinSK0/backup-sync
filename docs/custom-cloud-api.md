@@ -4,6 +4,9 @@ Aplikácia vie nahrávať herné save súbory (a voliteľne aj priečinky) na vl
 Server musí implementovať toto malé REST API. Všetky chránené volania nesú hlavičku
 `Authorization: Bearer <token>`.
 
+Produkčný endpoint musí používať HTTPS. Nešifrované HTTP aplikácia povolí iba pre
+`localhost`, `127.0.0.1` alebo inú loopback IP počas lokálneho vývoja.
+
 ## Prihlásenie
 
 ```
@@ -19,6 +22,8 @@ Content-Type: application/json
 Token si aplikácia uloží do Windows Credential Manager. Keď server vráti 401,
 aplikácia zobrazí „Prihlás sa znova".
 
+Token nesmie byť prázdny. Endpoint nesmie obsahovať prihlasovacie údaje, query ani fragment.
+
 ## Súbory
 
 Cesta súboru je hierarchická, napr. `BackupSync/games/Elden-Ring/Elden-Ring_2026-07-16_14-30-00.zip`.
@@ -32,6 +37,7 @@ GET    /api/files?prefix={prefix}/   → 200 + JSON zoznam:
 ```
 
 `createdAt` je voliteľné (ISO-8601). Zoznam vracia len súbory, ktorých cesta začína na `prefix`.
+Upload a download sú streamované, takže server nemusí držať celý súbor v pamäti.
 
 ## Minimálna implementácia
 

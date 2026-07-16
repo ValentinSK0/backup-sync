@@ -72,37 +72,43 @@ export default function Settings() {
   const settings = config.settings;
 
   // --- Sekcia 1: Zálohovanie (draft + uložiť) ---
+  const [autoBackupFolders, setAutoBackupFolders] = useState(
+    settings.autoBackupFolders,
+  );
   const [autoUpload, setAutoUpload] = useState(settings.autoUploadSaves);
   const [compression, setCompression] = useState<CompressionLevel>(
     settings.compressionLevel,
   );
   const [debounce, setDebounce] = useState(String(settings.debounceSeconds));
 
-  // --- Sekcia 2: Google Drive client ID + secret (draft + uložiť) ---
+  // --- Sekcia 2: Google Drive client ID (draft + uložiť) ---
   const [clientId, setClientId] = useState(settings.gdriveClientId);
-  const [clientSecret, setClientSecret] = useState(settings.gdriveClientSecret);
 
   useEffect(() => {
+    setAutoBackupFolders(settings.autoBackupFolders);
     setAutoUpload(settings.autoUploadSaves);
     setCompression(settings.compressionLevel);
     setDebounce(String(settings.debounceSeconds));
     setClientId(settings.gdriveClientId);
-    setClientSecret(settings.gdriveClientSecret);
   }, [settings]);
 
   const backupDirty =
+    autoBackupFolders !== settings.autoBackupFolders ||
     autoUpload !== settings.autoUploadSaves ||
     compression !== settings.compressionLevel ||
     debounce !== String(settings.debounceSeconds);
 
-  const clientIdDirty =
-    clientId !== settings.gdriveClientId ||
-    clientSecret !== settings.gdriveClientSecret;
+  const clientIdDirty = clientId !== settings.gdriveClientId;
 
   function saveBackup() {
     const seconds = Number(debounce);
-    if (!Number.isFinite(seconds) || seconds < 0 || !Number.isInteger(seconds)) {
-      toast("error", "Oneskorenie musí byť celé nezáporné číslo sekúnd.");
+    if (
+      !Number.isFinite(seconds) ||
+      seconds < 1 ||
+      seconds > 3600 ||
+      !Number.isInteger(seconds)
+    ) {
+      toast("error", "Oneskorenie musí byť celé číslo od 1 do 3600 sekúnd.");
       return;
     }
     void run(
@@ -110,6 +116,7 @@ export default function Settings() {
       () =>
         updateSettings({
           ...settings,
+          autoBackupFolders,
           autoUploadSaves: autoUpload,
           compressionLevel: compression,
           debounceSeconds: seconds,
@@ -125,7 +132,6 @@ export default function Settings() {
         updateSettings({
           ...settings,
           gdriveClientId: clientId.trim(),
-          gdriveClientSecret: clientSecret.trim(),
         }),
       "Google údaje uložené.",
     );
@@ -181,6 +187,21 @@ export default function Settings() {
             <div className="flex items-center justify-between gap-4">
               <div>
                 <div className="text-sm text-zinc-200">
+                  Automaticky zálohovať priečinky po zmene
+                </div>
+                <div className="text-xs text-zinc-500">
+                  Globálne nastavenie — priečinky ho môžu individuálne prepísať.
+                </div>
+              </div>
+              <Toggle
+                checked={autoBackupFolders}
+                onChange={setAutoBackupFolders}
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="text-sm text-zinc-200">
                   Automaticky nahrať save po zmene
                 </div>
                 <div className="text-xs text-zinc-500">
@@ -214,7 +235,8 @@ export default function Settings() {
                 <input
                   id="debounce"
                   type="number"
-                  min={0}
+                  min={1}
+                  max={3600}
                   step={1}
                   className={inputCls}
                   value={debounce}
@@ -238,7 +260,7 @@ export default function Settings() {
 
         <Section
           title="Google Drive"
-          description="OAuth Client ID (typ „Desktop app“) z Google Cloud Console."
+          description="OAuth Client ID typu „Desktop app“. Client Secret aplikácia nepotrebuje ani neukladá."
         >
           <div className="flex flex-col gap-4">
             <StatusRow status={gdrive} label="prihláste sa cez Google" />
@@ -255,16 +277,7 @@ export default function Settings() {
                 placeholder="xxxxxxxx.apps.googleusercontent.com"
                 spellCheck={false}
               />
-              <div className="mt-2 flex gap-2">
-                <input
-                  id="gdrive-client-secret"
-                  type="password"
-                  className={`${inputCls} font-mono !text-xs`}
-                  value={clientSecret}
-                  onChange={(e) => setClientSecret(e.currentTarget.value)}
-                  placeholder="Client Secret (GOCSPX-…)"
-                  spellCheck={false}
-                />
+              <div className="mt-2 flex justify-end">
                 <Button
                   variant="secondary"
                   onClick={saveClientId}
@@ -296,7 +309,7 @@ export default function Settings() {
                   <Button
                     variant="primary"
                     loading={busy === "gdriveConnect"}
-                    disabled={!settings.gdriveClientId || !settings.gdriveClientSecret}
+                    disabled={!settings.gdriveClientId}
                     onClick={() =>
                       run(
                         "gdriveConnect",
@@ -308,9 +321,9 @@ export default function Settings() {
                     <CloudIcon className="h-4 w-4" />
                     Pripojiť
                   </Button>
-                  {(!settings.gdriveClientId || !settings.gdriveClientSecret) && (
+                  {!settings.gdriveClientId && (
                     <span className="text-xs text-zinc-500">
-                      Najprv uložte Client ID aj Client Secret.
+                      Najprv uložte Client ID.
                     </span>
                   )}
                 </>

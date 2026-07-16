@@ -1,6 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { AppConfig, Provider, Settings, VersionInfo } from "./types";
+import type {
+  AppConfig,
+  CloudFolderBackup,
+  Provider,
+  Settings,
+  VersionInfo,
+} from "./types";
 
 export function getConfig(): Promise<AppConfig> {
   return invoke<AppConfig>("get_config");
@@ -19,6 +25,13 @@ export function addWatchedFolder(
 
 export function removeWatchedFolder(id: string): Promise<AppConfig> {
   return invoke<AppConfig>("remove_watched_folder", { id });
+}
+
+export function setFolderAutoBackup(
+  id: string,
+  value: boolean | null,
+): Promise<AppConfig> {
+  return invoke<AppConfig>("set_folder_auto_backup", { id, value });
 }
 
 export function addGame(
@@ -42,6 +55,21 @@ export function setGameAutoUpload(
 
 export function backupFolderNow(id: string): Promise<AppConfig> {
   return invoke<AppConfig>("backup_folder_now", { id });
+}
+
+export function listFolderBackups(): Promise<CloudFolderBackup[]> {
+  return invoke<CloudFolderBackup[]>("list_folder_backups");
+}
+
+export function connectFolderBackup(
+  cloudId: string,
+  path: string,
+): Promise<AppConfig> {
+  return invoke<AppConfig>("connect_folder_backup", { cloudId, path });
+}
+
+export function restoreFolderFromCloud(id: string): Promise<AppConfig> {
+  return invoke<AppConfig>("restore_folder_from_cloud", { id });
 }
 
 export function uploadGameSave(id: string): Promise<AppConfig> {

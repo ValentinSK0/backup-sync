@@ -51,9 +51,12 @@ function VersionsModal({ game, onClose }: { game: Game; onClose: () => void }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [toRestore, setToRestore] = useState<VersionInfo | null>(null);
   const [restoring, setRestoring] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    setVersions(null);
+    setLoadError(null);
     listGameVersions(game.id)
       .then((v) => {
         if (!cancelled) setVersions(v);
@@ -64,7 +67,7 @@ function VersionsModal({ game, onClose }: { game: Game; onClose: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [game.id]);
+  }, [game.id, reloadKey]);
 
   async function handleRestore() {
     if (!toRestore) return;
@@ -84,7 +87,16 @@ function VersionsModal({ game, onClose }: { game: Game; onClose: () => void }) {
     <>
       <Modal title={`Verzie — ${game.name}`} onClose={onClose} wide>
         {loadError ? (
-          <p className="break-words text-sm text-red-400">{loadError}</p>
+          <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-3">
+            <p className="break-words text-sm text-red-400">{loadError}</p>
+            <Button
+              className="mt-3"
+              variant="secondary"
+              onClick={() => setReloadKey((value) => value + 1)}
+            >
+              Skúsiť znova
+            </Button>
+          </div>
         ) : versions === null ? (
           <div className="flex items-center justify-center gap-2 py-8 text-sm text-zinc-500">
             <SpinnerIcon className="h-4 w-4" />
@@ -343,23 +355,33 @@ export default function Games() {
                   </div>
                 )}
 
-                {changed && (
-                  <Button
-                    variant="primary"
-                    className="w-full"
-                    loading={busy === `upload:${g.id}`}
-                    onClick={() =>
-                      run(
-                        `upload:${g.id}`,
-                        () => uploadGameSave(g.id),
-                        `Save hry „${g.name}“ nahraný na cloud.`,
-                      )
-                    }
-                  >
-                    <UploadIcon className="h-4 w-4" />
-                    Nahrať na cloud
-                  </Button>
-                )}
+                <Button
+                  variant={g.syncState === "synced" ? "secondary" : "primary"}
+                  className="w-full"
+                  loading={
+                    busy === `upload:${g.id}` || g.syncState === "syncing"
+                  }
+                  disabled={
+                    (busy !== null && busy !== `upload:${g.id}`) ||
+                    g.syncState === "syncing"
+                  }
+                  onClick={() =>
+                    run(
+                      `upload:${g.id}`,
+                      () => uploadGameSave(g.id),
+                      `Save hry „${g.name}“ nahraný na cloud.`,
+                    )
+                  }
+                >
+                  <UploadIcon className="h-4 w-4" />
+                  {g.syncState === "error"
+                    ? "Skúsiť znova"
+                    : g.syncState === "syncing"
+                      ? "Prebieha…"
+                      : g.syncState === "synced"
+                        ? "Nahrať znova"
+                        : "Nahrať na cloud"}
+                </Button>
 
                 <div className="mt-auto flex items-center gap-2 border-t border-zinc-800 pt-3">
                   <label

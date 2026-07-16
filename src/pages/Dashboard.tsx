@@ -49,7 +49,7 @@ const STATUS_ICON: Record<
   SyncProgress["status"],
   { Icon: typeof CheckIcon; cls: string; label: string }
 > = {
-  uploading: { Icon: UploadIcon, cls: "text-sky-400", label: "Nahráva sa" },
+  uploading: { Icon: UploadIcon, cls: "text-sky-400", label: "Prebieha" },
   done: { Icon: CheckIcon, cls: "text-emerald-400", label: "Dokončené" },
   error: { Icon: AlertIcon, cls: "text-red-400", label: "Chyba" },
 };

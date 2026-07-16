@@ -89,6 +89,26 @@ export function UploadIcon({ className }: IconProps) {
   );
 }
 
+export function DownloadIcon({ className }: IconProps) {
+  return (
+    <svg {...svgProps(className)} strokeWidth={2}>
+      <path d="M12 5v11" />
+      <path d="m7 11.5 5 5 5-5" />
+      <path d="M4.5 19.5h15" />
+    </svg>
+  );
+}
+
+export function LinkIcon({ className }: IconProps) {
+  return (
+    <svg {...svgProps(className)}>
+      <path d="m9.5 14.5 5-5" />
+      <path d="M7.1 17.9 5.7 19.3a3.5 3.5 0 0 1-5-5l3.2-3.2a3.5 3.5 0 0 1 5 0" />
+      <path d="m16.9 6.1 1.4-1.4a3.5 3.5 0 0 1 5 5l-3.2 3.2a3.5 3.5 0 0 1-5 0" />
+    </svg>
+  );
+}
+
 export function CloudIcon({ className }: IconProps) {
   return (
     <svg {...svgProps(className)}>

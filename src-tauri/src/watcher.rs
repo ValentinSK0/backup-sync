@@ -18,6 +18,7 @@ enum Target {
 
 struct WatchRoot {
     path: PathBuf,
+    comparable_path: PathBuf,
     target: Target,
 }
 
@@ -36,14 +37,18 @@ pub fn rebuild(app: &AppHandle, cfg: &AppConfig) {
 
     let mut roots: Vec<WatchRoot> = Vec::new();
     for f in &cfg.watched_folders {
+        let path = PathBuf::from(&f.path);
         roots.push(WatchRoot {
-            path: PathBuf::from(&f.path),
+            comparable_path: sync::comparable_path(&path),
+            path,
             target: Target::Folder(f.id.clone()),
         });
     }
     for g in &cfg.games {
+        let path = PathBuf::from(&g.save_path);
         roots.push(WatchRoot {
-            path: PathBuf::from(&g.save_path),
+            comparable_path: sync::comparable_path(&path),
+            path,
             target: Target::Game(g.id.clone()),
         });
     }
@@ -84,8 +89,9 @@ pub fn rebuild(app: &AppHandle, cfg: &AppConfig) {
                         if is_suppressed(&suppress, path) {
                             continue;
                         }
+                        let comparable_path = sync::comparable_path(path);
                         for root in &roots {
-                            if path.starts_with(&root.path) {
+                            if comparable_path.starts_with(&root.comparable_path) {
                                 pending.insert(root.target.clone(), now);
                             }
                         }
@@ -121,37 +127,84 @@ fn matters(kind: &notify::EventKind) -> bool {
     )
 }
 
-fn is_suppressed(suppress: &Arc<std::sync::Mutex<HashMap<String, Instant>>>, path: &Path) -> bool {
+fn is_suppressed(suppress: &Arc<std::sync::Mutex<HashMap<PathBuf, Instant>>>, path: &Path) -> bool {
     let mut map = suppress.lock().unwrap();
     let now = Instant::now();
     map.retain(|_, until| *until > now);
-    map.keys().any(|root| path.starts_with(root))
+    let comparable_path = sync::comparable_path(path);
+    map.keys().any(|root| comparable_path.starts_with(root))
 }
 
 async fn handle_change(app: AppHandle, target: Target) {
     match target {
         Target::Folder(id) => {
-            sync::with_config(&app, |c| {
+            let mut retry_after_sync = false;
+            let cfg = match sync::with_config(&app, |c| {
                 if let Some(f) = c.watched_folders.iter_mut().find(|f| f.id == id) {
-                    if f.sync_state != SyncState::Syncing {
+                    if f.sync_state == SyncState::Syncing {
+                        retry_after_sync = sync::record_pending_change(&app, "folder", &id);
+                    } else {
                         f.sync_state = SyncState::Changed;
                     }
                 }
             })
-            .await;
-            // priečinky sa zálohujú automaticky (real-time sync)
-            let _ = sync::backup_folder(&app, &id).await;
+            .await
+            {
+                Ok(config) => config,
+                Err(error) => {
+                    sync::emit_progress(&app, "folder", &id, "error", Some(error));
+                    return;
+                }
+            };
+            let auto = cfg
+                .watched_folders
+                .iter()
+                .find(|f| f.id == id)
+                .map(|f| {
+                    (f.sync_state != SyncState::Syncing || retry_after_sync)
+                        && f.auto_backup.unwrap_or(cfg.settings.auto_backup_folders)
+                })
+                .unwrap_or(false);
+            if auto {
+                if retry_after_sync {
+                    wait_until_idle(&app, "folder", &id).await;
+                    let current = sync::snapshot(&app).await;
+                    let still_auto = current
+                        .watched_folders
+                        .iter()
+                        .find(|folder| folder.id == id)
+                        .is_some_and(|folder| {
+                            folder
+                                .auto_backup
+                                .unwrap_or(current.settings.auto_backup_folders)
+                        });
+                    if !still_auto {
+                        return;
+                    }
+                }
+                let _ = sync::backup_folder(&app, &id).await;
+            }
         }
         Target::Game(id) => {
-            let cfg = sync::with_config(&app, |c| {
+            let mut retry_after_sync = false;
+            let cfg = match sync::with_config(&app, |c| {
                 if let Some(g) = c.games.iter_mut().find(|g| g.id == id) {
-                    if g.sync_state != SyncState::Syncing {
+                    g.last_change = Some(now_iso());
+                    if g.sync_state == SyncState::Syncing {
+                        retry_after_sync = sync::record_pending_change(&app, "game", &id);
+                    } else {
                         g.sync_state = SyncState::Changed;
-                        g.last_change = Some(now_iso());
                     }
                 }
             })
-            .await;
+            .await
+            {
+                Ok(config) => config,
+                Err(error) => {
+                    sync::emit_progress(&app, "game", &id, "error", Some(error));
+                    return;
+                }
+            };
             let auto = cfg
                 .games
                 .iter()
@@ -159,8 +212,30 @@ async fn handle_change(app: AppHandle, target: Target) {
                 .map(|g| g.auto_upload.unwrap_or(cfg.settings.auto_upload_saves))
                 .unwrap_or(false);
             if auto {
+                if retry_after_sync {
+                    wait_until_idle(&app, "game", &id).await;
+                    let current = sync::snapshot(&app).await;
+                    let still_auto =
+                        current
+                            .games
+                            .iter()
+                            .find(|game| game.id == id)
+                            .is_some_and(|game| {
+                                game.auto_upload
+                                    .unwrap_or(current.settings.auto_upload_saves)
+                            });
+                    if !still_auto {
+                        return;
+                    }
+                }
                 let _ = sync::upload_game(&app, &id).await;
             }
         }
+    }
+}
+
+async fn wait_until_idle(app: &AppHandle, kind: &str, id: &str) {
+    while sync::is_sync_active(app, kind, id) {
+        tokio::time::sleep(Duration::from_millis(250)).await;
     }
 }

@@ -11,6 +11,11 @@ src-tauri/target/
 # Secrets a lokálna konfigurácia
 .env
 *.local
+*.pfx
+*.p12
+*.pem
+*.key
+release-artifacts/
 
 # OS
 Thumbs.db

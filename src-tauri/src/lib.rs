@@ -6,7 +6,7 @@ mod sync;
 mod watcher;
 
 use config::{AppConfig, SyncState};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex as StdMutex};
@@ -17,7 +17,9 @@ pub struct AppState {
     pub config: tokio::sync::Mutex<AppConfig>,
     pub config_dir: PathBuf,
     /// cesty, ktorých zmeny watcher dočasne ignoruje (počas obnovy zálohy)
-    pub suppress: Arc<StdMutex<HashMap<String, Instant>>>,
+    pub suppress: Arc<StdMutex<HashMap<PathBuf, Instant>>>,
+    pub active_syncs: Arc<StdMutex<HashSet<String>>>,
+    pub pending_changes: Arc<StdMutex<HashSet<String>>>,
     pub watcher_stop: StdMutex<Option<Arc<AtomicBool>>>,
 }
 
@@ -37,9 +39,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let config_dir = app.path().app_config_dir()?;
-            let mut cfg = AppConfig::load(&config::config_file(&config_dir));
+            let config_path = config::config_file(&config_dir);
+            let scrub_legacy_secret = config::contains_legacy_client_secret(&config_path);
+            let mut cfg = AppConfig::load(&config_path);
             // prerušené uploady z minulého behu → označ ako zmenené
             for f in cfg.watched_folders.iter_mut() {
+                if f.cloud_name.is_empty() {
+                    f.cloud_name = sync::folder_cloud_name(&f.path, &f.id);
+                }
                 if f.sync_state == SyncState::Syncing {
                     f.sync_state = SyncState::Changed;
                 }
@@ -49,11 +56,18 @@ pub fn run() {
                     g.sync_state = SyncState::Changed;
                 }
             }
+            cfg.save(&config_path).map_err(std::io::Error::other)?;
+            if scrub_legacy_secret {
+                // Prvý save odstráni pole z hlavného configu, druhý aj zo záložnej kópie.
+                cfg.save(&config_path).map_err(std::io::Error::other)?;
+            }
 
             let state = AppState {
                 config: tokio::sync::Mutex::new(cfg.clone()),
                 config_dir,
                 suppress: Arc::new(StdMutex::new(HashMap::new())),
+                active_syncs: Arc::new(StdMutex::new(HashSet::new())),
+                pending_changes: Arc::new(StdMutex::new(HashSet::new())),
                 watcher_stop: StdMutex::new(None),
             };
             app.manage(state);
@@ -65,10 +79,14 @@ pub fn run() {
             commands::update_settings,
             commands::add_watched_folder,
             commands::remove_watched_folder,
+            commands::set_folder_auto_backup,
             commands::add_game,
             commands::remove_game,
             commands::set_game_auto_upload,
             commands::backup_folder_now,
+            commands::list_folder_backups,
+            commands::connect_folder_backup,
+            commands::restore_folder_from_cloud,
             commands::upload_game_save,
             commands::list_game_versions,
             commands::restore_game_version,

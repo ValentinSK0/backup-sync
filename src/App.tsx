@@ -83,10 +83,10 @@ export default function App() {
         }
       }
 
-      // "uploading" nechávame len v activity feede, inak by toasty spamovali pri veľkých zálohách
+      // Priebežné udalosti nechávame len vo feede, inak by toasty spamovali.
       if (p.status === "done") {
         toast("success", p.message ?? `Hotovo: ${name}`);
-      } else {
+      } else if (p.status === "error") {
         toast("error", p.message ? `${name}: ${p.message}` : `Chyba: ${name}`);
       }
     },
