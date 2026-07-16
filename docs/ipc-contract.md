@@ -41,6 +41,7 @@ interface Settings {
   autoUploadSaves: boolean;
   compressionLevel: CompressionLevel;
   gdriveClientId: string;
+  gdriveClientSecretConfigured: boolean;
 }
 
 interface CloudFolderBackup {

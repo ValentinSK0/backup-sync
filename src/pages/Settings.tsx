@@ -4,6 +4,7 @@ import {
   customCloudLogout,
   gdriveConnect,
   gdriveDisconnect,
+  saveGdriveCredentials,
   updateSettings,
 } from "../api";
 import { CloudIcon } from "../components/icons";
@@ -81,8 +82,9 @@ export default function Settings() {
   );
   const [debounce, setDebounce] = useState(String(settings.debounceSeconds));
 
-  // --- Sekcia 2: Google Drive client ID (draft + uložiť) ---
+  // --- Sekcia 2: Google Drive OAuth údaje (draft + uložiť) ---
   const [clientId, setClientId] = useState(settings.gdriveClientId);
+  const [clientSecret, setClientSecret] = useState("");
 
   useEffect(() => {
     setAutoBackupFolders(settings.autoBackupFolders);
@@ -90,6 +92,7 @@ export default function Settings() {
     setCompression(settings.compressionLevel);
     setDebounce(String(settings.debounceSeconds));
     setClientId(settings.gdriveClientId);
+    setClientSecret("");
   }, [settings]);
 
   const backupDirty =
@@ -98,7 +101,8 @@ export default function Settings() {
     compression !== settings.compressionLevel ||
     debounce !== String(settings.debounceSeconds);
 
-  const clientIdDirty = clientId !== settings.gdriveClientId;
+  const googleDirty =
+    clientId.trim() !== settings.gdriveClientId || clientSecret.length > 0;
 
   function saveBackup() {
     const seconds = Number(debounce);
@@ -125,16 +129,27 @@ export default function Settings() {
     );
   }
 
-  function saveClientId() {
-    void run(
-      "saveClientId",
-      () =>
-        updateSettings({
-          ...settings,
-          gdriveClientId: clientId.trim(),
-        }),
-      "Google údaje uložené.",
+  async function saveGoogleCredentials() {
+    const normalizedClientId = clientId.trim();
+    const normalizedSecret = clientSecret.trim();
+    if (!normalizedClientId) {
+      toast("error", "Vyplňte OAuth Client ID.");
+      return;
+    }
+    if (
+      (!settings.gdriveClientSecretConfigured ||
+        normalizedClientId !== settings.gdriveClientId) &&
+      !normalizedSecret
+    ) {
+      toast("error", "Vyplňte OAuth Client Secret.");
+      return;
+    }
+    const saved = await run(
+      "saveGoogleCredentials",
+      () => saveGdriveCredentials(normalizedClientId, normalizedSecret),
+      "Google OAuth údaje uložené.",
     );
+    if (saved) setClientSecret("");
   }
 
   // --- Sekcia 3: Vlastný cloud (login formulár) ---
@@ -260,7 +275,7 @@ export default function Settings() {
 
         <Section
           title="Google Drive"
-          description="OAuth Client ID typu „Desktop app“. Client Secret aplikácia nepotrebuje ani neukladá."
+          description="OAuth údaje typu „Desktop app“. Client Secret sa bezpečne uloží vo Windows Credential Manager, nie v configu."
         >
           <div className="flex flex-col gap-4">
             <StatusRow status={gdrive} label="prihláste sa cez Google" />
@@ -277,14 +292,39 @@ export default function Settings() {
                 placeholder="xxxxxxxx.apps.googleusercontent.com"
                 spellCheck={false}
               />
+              <label
+                className={`${labelCls} mt-3`}
+                htmlFor="gdrive-client-secret"
+              >
+                OAuth Client Secret
+              </label>
+              <input
+                id="gdrive-client-secret"
+                type="password"
+                className={`${inputCls} font-mono !text-xs`}
+                value={clientSecret}
+                onChange={(e) => setClientSecret(e.currentTarget.value)}
+                placeholder={
+                  settings.gdriveClientSecretConfigured
+                    ? "Uložený — prázdne pole ho nemení"
+                    : "Zadajte Client Secret"
+                }
+                autoComplete="new-password"
+                spellCheck={false}
+              />
+              <p className="mt-1.5 text-xs text-zinc-500">
+                {settings.gdriveClientSecretConfigured
+                  ? "Client Secret je uložený v zabezpečenom úložisku Windows."
+                  : "Client Secret chýba. Bez neho sa tento Google OAuth klient neprihlási."}
+              </p>
               <div className="mt-2 flex justify-end">
                 <Button
                   variant="secondary"
-                  onClick={saveClientId}
-                  disabled={!clientIdDirty}
-                  loading={busy === "saveClientId"}
+                  onClick={() => void saveGoogleCredentials()}
+                  disabled={!googleDirty}
+                  loading={busy === "saveGoogleCredentials"}
                 >
-                  Uložiť
+                  Uložiť OAuth údaje
                 </Button>
               </div>
             </div>
@@ -309,7 +349,11 @@ export default function Settings() {
                   <Button
                     variant="primary"
                     loading={busy === "gdriveConnect"}
-                    disabled={!settings.gdriveClientId}
+                    disabled={
+                      !settings.gdriveClientId ||
+                      !settings.gdriveClientSecretConfigured ||
+                      googleDirty
+                    }
                     onClick={() =>
                       run(
                         "gdriveConnect",
@@ -321,9 +365,11 @@ export default function Settings() {
                     <CloudIcon className="h-4 w-4" />
                     Pripojiť
                   </Button>
-                  {!settings.gdriveClientId && (
+                  {(!settings.gdriveClientId ||
+                    !settings.gdriveClientSecretConfigured ||
+                    googleDirty) && (
                     <span className="text-xs text-zinc-500">
-                      Najprv uložte Client ID.
+                      Najprv uložte Client ID aj Client Secret.
                     </span>
                   )}
                 </>

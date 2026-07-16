@@ -41,7 +41,22 @@ pub fn run() {
             let config_dir = app.path().app_config_dir()?;
             let config_path = config::config_file(&config_dir);
             let scrub_legacy_secret = config::contains_legacy_client_secret(&config_path);
+            let legacy_client_secret = config::legacy_client_secret(&config_path);
             let mut cfg = AppConfig::load(&config_path);
+            if storage::keyring_get(storage::gdrive::CLIENT_SECRET_KEY).is_err() {
+                if let Some(secret) = legacy_client_secret {
+                    if let Err(error) =
+                        storage::keyring_set(storage::gdrive::CLIENT_SECRET_KEY, &secret)
+                    {
+                        cfg.providers.gdrive.error = Some(format!(
+                            "Client Secret sa nepodarilo presunúť do Windows Credential Manager: {error}"
+                        ));
+                    }
+                }
+            }
+            cfg.settings.gdrive_client_secret_configured =
+                storage::keyring_get(storage::gdrive::CLIENT_SECRET_KEY)
+                    .is_ok_and(|secret| !secret.trim().is_empty());
             // prerušené uploady z minulého behu → označ ako zmenené
             for f in cfg.watched_folders.iter_mut() {
                 if f.cloud_name.is_empty() {
@@ -77,6 +92,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_config,
             commands::update_settings,
+            commands::save_gdrive_credentials,
             commands::add_watched_folder,
             commands::remove_watched_folder,
             commands::set_folder_auto_backup,

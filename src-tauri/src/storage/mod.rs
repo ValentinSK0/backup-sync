@@ -97,10 +97,17 @@ pub fn make_provider(
             if client_id.trim().is_empty() {
                 return Err("Chýba Google OAuth Client ID. Doplň ho v Nastaveniach.".into());
             }
+            let client_secret = keyring_get(gdrive::CLIENT_SECRET_KEY).map_err(|_| {
+                "Chýba Google OAuth Client Secret. Doplň ho v Nastaveniach.".to_string()
+            })?;
             let refresh_token = keyring_get(gdrive::REFRESH_TOKEN_KEY).map_err(|_| {
                 "Google Drive token sa nenašiel. Prihlás sa znova v Nastaveniach.".to_string()
             })?;
-            Ok(Box::new(gdrive::GDrive::new(client_id, refresh_token)?))
+            Ok(Box::new(gdrive::GDrive::new(
+                client_id,
+                client_secret,
+                refresh_token,
+            )?))
         }
         Provider::CustomCloud => {
             let status = &config.providers.custom_cloud;

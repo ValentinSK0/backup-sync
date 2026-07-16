@@ -19,24 +19,77 @@ pub async fn update_settings(app: AppHandle, settings: Settings) -> CmdResult<Ap
         return Err("Oneskorenie musí byť celé číslo od 1 do 3600 sekúnd.".into());
     }
     let mut settings = settings;
-    settings.gdrive_client_id = settings.gdrive_client_id.trim().to_string();
     let previous = sync::snapshot(&app).await;
-    let client_changed = previous.settings.gdrive_client_id != settings.gdrive_client_id;
-    if client_changed && sync::has_active_syncs(&app) {
-        return Err("Počkaj na dokončenie synchronizácie a potom zmeň Google Client ID.".into());
-    }
+    settings.gdrive_client_id = previous.settings.gdrive_client_id;
+    settings.gdrive_client_secret_configured = previous.settings.gdrive_client_secret_configured;
     let cfg = sync::with_config(&app, |c| {
         c.settings = settings;
-        if client_changed {
+    })
+    .await?;
+    watcher::rebuild(&app, &cfg);
+    Ok(cfg)
+}
+
+#[tauri::command]
+pub async fn save_gdrive_credentials(
+    app: AppHandle,
+    client_id: String,
+    client_secret: String,
+) -> CmdResult<AppConfig> {
+    let client_id = client_id.trim().to_string();
+    let submitted_secret = client_secret.trim();
+    if client_id.is_empty() {
+        return Err("Vyplň Google OAuth Client ID.".into());
+    }
+    if !client_id.ends_with(".apps.googleusercontent.com") {
+        return Err("Google OAuth Client ID musí končiť na .apps.googleusercontent.com.".into());
+    }
+
+    let previous = sync::snapshot(&app).await;
+    let previous_secret = storage::keyring_get(gdrive::CLIENT_SECRET_KEY)
+        .ok()
+        .filter(|secret| !secret.trim().is_empty());
+    let client_changed = previous.settings.gdrive_client_id != client_id;
+    if client_changed && submitted_secret.is_empty() {
+        return Err("Pri zmene Client ID zadaj aj jeho Client Secret.".into());
+    }
+    let desired_secret = if submitted_secret.is_empty() {
+        previous_secret
+            .clone()
+            .ok_or_else(|| "Vyplň Google OAuth Client Secret.".to_string())?
+    } else {
+        submitted_secret.to_string()
+    };
+    let secret_changed = previous_secret.as_deref() != Some(desired_secret.as_str());
+    if (client_changed || secret_changed) && sync::has_active_syncs(&app) {
+        return Err("Počkaj na dokončenie synchronizácie a potom zmeň Google údaje.".into());
+    }
+
+    storage::keyring_set(gdrive::CLIENT_SECRET_KEY, &desired_secret)?;
+    let result = sync::with_config(&app, |c| {
+        c.settings.gdrive_client_id = client_id;
+        c.settings.gdrive_client_secret_configured = true;
+        if client_changed || secret_changed {
             c.providers.gdrive = Default::default();
         }
     })
-    .await?;
-    if client_changed {
+    .await;
+
+    let config = match result {
+        Ok(config) => config,
+        Err(error) => {
+            if let Some(secret) = previous_secret {
+                let _ = storage::keyring_set(gdrive::CLIENT_SECRET_KEY, &secret);
+            } else {
+                storage::keyring_delete(gdrive::CLIENT_SECRET_KEY);
+            }
+            return Err(error);
+        }
+    };
+    if client_changed || secret_changed {
         storage::keyring_delete(gdrive::REFRESH_TOKEN_KEY);
     }
-    watcher::rebuild(&app, &cfg);
-    Ok(cfg)
+    Ok(config)
 }
 
 fn canonical_directory(path: &str) -> CmdResult<PathBuf> {
@@ -215,7 +268,10 @@ pub async fn restore_game_version(app: AppHandle, id: String, version_id: String
 #[tauri::command]
 pub async fn gdrive_connect(app: AppHandle) -> CmdResult<AppConfig> {
     let settings = sync::snapshot(&app).await.settings;
-    let (refresh_token, account) = gdrive::connect(&app, &settings.gdrive_client_id).await?;
+    let client_secret = storage::keyring_get(gdrive::CLIENT_SECRET_KEY)
+        .map_err(|_| "Chýba Google OAuth Client Secret. Ulož ho v Nastaveniach.".to_string())?;
+    let (refresh_token, account) =
+        gdrive::connect(&app, &settings.gdrive_client_id, &client_secret).await?;
     storage::keyring_set(gdrive::REFRESH_TOKEN_KEY, &refresh_token)?;
     let result = sync::with_config(&app, |c| {
         c.providers.gdrive.connected = true;

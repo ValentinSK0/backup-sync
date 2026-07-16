@@ -41,6 +41,7 @@ export interface Settings {
   autoUploadSaves: boolean; // globálny slider zap/vyp
   compressionLevel: CompressionLevel;
   gdriveClientId: string; // OAuth client ID (Desktop app) z Google Cloud Console
+  gdriveClientSecretConfigured: boolean; // hodnota ostáva vo Windows Credential Manager
 }
 
 export interface AppConfig {

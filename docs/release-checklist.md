@@ -17,7 +17,7 @@ npm run build
 - OAuth Client je typu **Desktop app**.
 - Consent screen je pre verejných používateľov v stave **In production**.
 - Build dostane `BACKUP_SYNC_GOOGLE_CLIENT_ID`.
-- Client Secret sa do zdrojov ani binárky nevkladá.
+- Client Secret sa do zdrojov ani binárky nevkladá; používateľ ho zadá v aplikácii a uloží sa do Windows Credential Manager.
 
 ## Windows bundle
 

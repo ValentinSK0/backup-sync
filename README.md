@@ -46,13 +46,13 @@ Aplikácia uloží rovnaké cloud ID. Obe PC potom pracujú s rovnakou priečink
 
 ## Google Drive
 
-Oficiálny release môže mať OAuth Client ID vložený už pri builde. Pri vlastnom builde vytvor v Google Cloud Console OAuth 2.0 Client ID typu **Desktop app**, zapni Google Drive API a nastav:
+Oficiálny release môže mať OAuth Client ID vložený už pri builde. V Nastaveniach treba zadať aj Client Secret z rovnakého OAuth klienta. Pri vlastnom builde vytvor v Google Cloud Console OAuth 2.0 Client ID typu **Desktop app**, zapni Google Drive API a nastav:
 
 ```powershell
 $env:BACKUP_SYNC_GOOGLE_CLIENT_ID="123456789.apps.googleusercontent.com"
 ```
 
-Aplikácia používa PKCE, kontrolu OAuth `state` a iba scope `drive.file`. Client Secret nepotrebuje ani neukladá.
+Aplikácia používa PKCE, kontrolu OAuth `state` a iba scope `drive.file`. Client Secret ukladá iba vo Windows Credential Manager; nikdy nie v `config.json`.
 
 Pre verejný release musí byť OAuth consent screen v Google Cloud nastavený na **In production**. V režime **Testing** fungujú iba testovací používatelia a refresh token môže po siedmich dňoch vypršať.
 

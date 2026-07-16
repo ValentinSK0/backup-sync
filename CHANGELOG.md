@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1 — 2026-07-16
+
+- Opravené Google OAuth prihlásenie pre klientov vyžadujúcich Client Secret.
+- Pridané pole Client Secret do Nastavení.
+- Client Secret sa ukladá iba do Windows Credential Manager, nikdy do konfigurácie.
+- Client Secret sa posiela pri prvom prihlásení aj obnove Google tokenu.
+
 ## 0.1.0 — 2026-07-16
 
 - Prvé verejné Windows vydanie.

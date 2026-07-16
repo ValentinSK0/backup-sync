@@ -11,6 +11,7 @@ use tokio::net::TcpListener;
 use tokio_util::io::ReaderStream;
 
 pub const REFRESH_TOKEN_KEY: &str = "gdrive_refresh_token";
+pub const CLIENT_SECRET_KEY: &str = "gdrive_client_secret";
 
 const AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
@@ -65,9 +66,16 @@ fn default_expiry() -> u64 {
 
 /// Spustí OAuth 2.0 PKCE flow: otvorí prehliadač, počká na kód na localhost porte
 /// a vymení ho za tokeny. Vráti (refresh_token, názov účtu).
-pub async fn connect(app: &tauri::AppHandle, client_id: &str) -> Result<(String, String), String> {
+pub async fn connect(
+    app: &tauri::AppHandle,
+    client_id: &str,
+    client_secret: &str,
+) -> Result<(String, String), String> {
     if client_id.trim().is_empty() {
         return Err("Najprv vlož Google OAuth Client ID v Nastaveniach.".into());
+    }
+    if client_secret.trim().is_empty() {
+        return Err("Najprv vlož Google OAuth Client Secret v Nastaveniach.".into());
     }
 
     let mut verifier_bytes = [0u8; 48];
@@ -119,6 +127,7 @@ pub async fn connect(app: &tauri::AppHandle, client_id: &str) -> Result<(String,
         .post(TOKEN_URL)
         .form(&[
             ("client_id", client_id),
+            ("client_secret", client_secret),
             ("code", code.as_str()),
             ("code_verifier", verifier.as_str()),
             ("grant_type", "authorization_code"),
@@ -223,15 +232,21 @@ async fn check_api(context: &str, resp: reqwest::Response) -> Result<reqwest::Re
 
 pub struct GDrive {
     client_id: String,
+    client_secret: String,
     refresh_token: String,
     http: reqwest::Client,
     access: tokio::sync::Mutex<Option<(String, Instant)>>,
 }
 
 impl GDrive {
-    pub fn new(client_id: String, refresh_token: String) -> Result<Self, String> {
+    pub fn new(
+        client_id: String,
+        client_secret: String,
+        refresh_token: String,
+    ) -> Result<Self, String> {
         Ok(Self {
             client_id,
+            client_secret,
             refresh_token,
             http: http_client()?,
             access: tokio::sync::Mutex::new(None),
@@ -250,6 +265,7 @@ impl GDrive {
             .post(TOKEN_URL)
             .form(&[
                 ("client_id", self.client_id.as_str()),
+                ("client_secret", self.client_secret.as_str()),
                 ("refresh_token", self.refresh_token.as_str()),
                 ("grant_type", "refresh_token"),
             ])

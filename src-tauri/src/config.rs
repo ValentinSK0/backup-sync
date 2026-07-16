@@ -110,6 +110,8 @@ pub struct Settings {
     pub compression_level: CompressionLevel,
     #[serde(default = "default_gdrive_client_id")]
     pub gdrive_client_id: String,
+    #[serde(default)]
+    pub gdrive_client_secret_configured: bool,
 }
 
 fn default_theme() -> String {
@@ -137,6 +139,7 @@ impl Default for Settings {
             auto_upload_saves: false,
             compression_level: default_compression(),
             gdrive_client_id: default_gdrive_client_id(),
+            gdrive_client_secret_configured: false,
         }
     }
 }
@@ -210,6 +213,22 @@ pub fn contains_legacy_client_secret(path: &Path) -> bool {
         .iter()
         .any(|candidate| {
             fs::read_to_string(candidate).is_ok_and(|text| text.contains("\"gdriveClientSecret\""))
+        })
+}
+
+pub fn legacy_client_secret(path: &Path) -> Option<String> {
+    [path.to_path_buf(), sidecar_path(path, ".bak")]
+        .iter()
+        .find_map(|candidate| {
+            let text = fs::read_to_string(candidate).ok()?;
+            let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+            value
+                .get("settings")?
+                .get("gdriveClientSecret")?
+                .as_str()
+                .map(str::trim)
+                .filter(|secret| !secret.is_empty())
+                .map(str::to_string)
         })
 }
 
@@ -340,6 +359,10 @@ mod tests {
         )
         .unwrap();
 
+        assert_eq!(
+            legacy_client_secret(&path).as_deref(),
+            Some("legacy-plaintext-secret")
+        );
         let should_scrub_backup = contains_legacy_client_secret(&path);
         let config = AppConfig::load(&path);
         config.save(&path).unwrap();

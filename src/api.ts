@@ -16,6 +16,16 @@ export function updateSettings(settings: Settings): Promise<AppConfig> {
   return invoke<AppConfig>("update_settings", { settings });
 }
 
+export function saveGdriveCredentials(
+  clientId: string,
+  clientSecret: string,
+): Promise<AppConfig> {
+  return invoke<AppConfig>("save_gdrive_credentials", {
+    clientId,
+    clientSecret,
+  });
+}
+
 export function addWatchedFolder(
   path: string,
   provider: Provider,
