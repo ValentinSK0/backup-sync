@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import {
   addGame,
+  connectGameBackup,
+  listGameBackups,
   listGameVersions,
+  openLocalFolder,
   pickFolder,
   removeGame,
   restoreGameVersion,
@@ -12,9 +15,11 @@ import { ConfirmDialog, Modal } from "../components/Modal";
 import StateBadge from "../components/StateBadge";
 import {
   CloudIcon,
+  DownloadIcon,
   FolderIcon,
   GamepadIcon,
   HistoryIcon,
+  LinkIcon,
   PlusIcon,
   SpinnerIcon,
   TrashIcon,
@@ -31,7 +36,7 @@ import {
 import { useApp } from "../context";
 import { errMsg, formatBytes, formatDate, providerLabel } from "../format";
 import { useConfigAction } from "../hooks";
-import type { Game, Provider, VersionInfo } from "../types";
+import type { CloudGameBackup, Game, Provider, VersionInfo } from "../types";
 
 type AutoUploadOption = "inherit" | "on" | "off";
 
@@ -151,6 +156,215 @@ function VersionsModal({ game, onClose }: { game: Game; onClose: () => void }) {
   );
 }
 
+function ConnectGameModal({
+  backup,
+  onClose,
+  onDone,
+}: {
+  backup: CloudGameBackup;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const { toast } = useApp();
+  const { busy, run } = useConfigAction();
+  const [name, setName] = useState(backup.name);
+  const [destination, setDestination] = useState("");
+  const [picking, setPicking] = useState(false);
+
+  async function handlePick() {
+    setPicking(true);
+    try {
+      const path = await pickFolder();
+      if (path) setDestination(path);
+    } finally {
+      setPicking(false);
+    }
+  }
+
+  async function handleConnect() {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      toast("error", "Zadajte názov hry.");
+      return;
+    }
+    if (!destination) {
+      toast("error", "Vyberte priečinok na tomto PC, kam sa má hra synchronizovať.");
+      return;
+    }
+    const ok = await run(
+      "connectGame",
+      () => connectGameBackup(backup.cloudId, destination, trimmed),
+      `Hra „${trimmed}“ bola stiahnutá z cloudu a napojená.`,
+    );
+    if (ok) onDone();
+  }
+
+  return (
+    <Modal title={`Napojiť z cloudu — ${backup.name}`} onClose={onClose}>
+      <div className="flex flex-col gap-4">
+        <div className="rounded-lg border border-zinc-800 bg-zinc-800/40 px-3 py-2 text-xs text-zinc-400">
+          Najnovšia verzia z {formatDate(backup.latestAt)}
+          <span className="text-zinc-700"> · </span>
+          {backup.versionCount}{" "}
+          {backup.versionCount === 1 ? "verzia" : "verzií"}
+          <span className="text-zinc-700"> · </span>
+          {formatBytes(backup.sizeBytes)}
+        </div>
+
+        <div>
+          <label className={labelCls} htmlFor="connect-game-name">
+            Názov hry
+          </label>
+          <input
+            id="connect-game-name"
+            className={inputCls}
+            value={name}
+            onChange={(e) => setName(e.currentTarget.value)}
+            autoFocus
+          />
+        </div>
+
+        <div>
+          <span className={labelCls}>
+            Kam synchronizovať na tomto PC
+          </span>
+          <div className="flex items-center gap-2">
+            <div
+              className={`min-w-0 flex-1 truncate rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2 font-mono text-xs ${destination ? "text-zinc-200" : "text-zinc-500"}`}
+              title={destination || undefined}
+            >
+              {destination || "Žiadny priečinok nevybraný"}
+            </div>
+            <Button variant="secondary" onClick={handlePick} loading={picking}>
+              <FolderIcon className="h-4 w-4" />
+              Vybrať
+            </Button>
+          </div>
+          <p className="mt-1.5 text-xs text-zinc-500">
+            Do tohto priečinka sa rozbalí najnovší save. Existujúce súbory s
+            rovnakým názvom sa prepíšu.
+          </p>
+        </div>
+
+        <div className="mt-1 flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>
+            Zrušiť
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleConnect}
+            loading={busy === "connectGame"}
+          >
+            <DownloadIcon className="h-4 w-4" />
+            Stiahnuť a napojiť
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function CloudGamesModal({ onClose }: { onClose: () => void }) {
+  const [backups, setBackups] = useState<CloudGameBackup[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [selected, setSelected] = useState<CloudGameBackup | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setBackups(null);
+    setLoadError(null);
+    listGameBackups()
+      .then((b) => {
+        if (!cancelled) setBackups(b);
+      })
+      .catch((e) => {
+        if (!cancelled) setLoadError(errMsg(e));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  return (
+    <>
+      <Modal title="Vybrať z cloudu" onClose={onClose} wide>
+        <p className="mb-4 text-sm text-zinc-400">
+          Herné save súbory zálohované na tvojom cloude. Vyber hru a priečinok
+          na tomto PC, kam sa má stiahnuť.
+        </p>
+
+        {loadError ? (
+          <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-3">
+            <p className="break-words text-sm text-red-400">{loadError}</p>
+            <Button
+              className="mt-3"
+              variant="secondary"
+              onClick={() => setReloadKey((value) => value + 1)}
+            >
+              Skúsiť znova
+            </Button>
+          </div>
+        ) : backups === null ? (
+          <div className="flex items-center justify-center gap-2 py-8 text-sm text-zinc-500">
+            <SpinnerIcon className="h-4 w-4" />
+            Načítavajú sa zálohy z cloudu…
+          </div>
+        ) : backups.length === 0 ? (
+          <p className="py-4 text-center text-sm text-zinc-500">
+            Na cloude zatiaľ nie sú žiadne herné zálohy.
+          </p>
+        ) : (
+          <div className="divide-y divide-zinc-800">
+            {backups.map((b) => (
+              <div key={b.cloudId} className="flex items-center gap-3 py-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-600/15 text-indigo-400">
+                  <GamepadIcon className="h-4.5 w-4.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium text-zinc-100">
+                      {b.name}
+                    </span>
+                    {b.alreadyConnected && (
+                      <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+                        Už napojené
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-zinc-500">
+                    {formatDate(b.latestAt)}
+                    <span className="text-zinc-700"> · </span>
+                    {b.versionCount}{" "}
+                    {b.versionCount === 1 ? "verzia" : "verzií"}
+                    <span className="text-zinc-700"> · </span>
+                    {formatBytes(b.sizeBytes)}
+                  </div>
+                </div>
+                <Button variant="secondary" onClick={() => setSelected(b)}>
+                  <LinkIcon className="h-4 w-4" />
+                  Napojiť na PC
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
+
+      {selected && (
+        <ConnectGameModal
+          backup={selected}
+          onClose={() => setSelected(null)}
+          onDone={() => {
+            setSelected(null);
+            onClose();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
 function AddGameModal({ onClose }: { onClose: () => void }) {
   const { toast } = useApp();
   const { busy, run } = useConfigAction();
@@ -256,13 +470,22 @@ function AddGameModal({ onClose }: { onClose: () => void }) {
 }
 
 export default function Games() {
-  const { config } = useApp();
+  const { config, toast } = useApp();
   const { busy, run } = useConfigAction();
   const [toRemove, setToRemove] = useState<Game | null>(null);
   const [versionsGame, setVersionsGame] = useState<Game | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [cloudOpen, setCloudOpen] = useState(false);
 
   const games = config.games;
+
+  async function handleOpenFolder(game: Game) {
+    try {
+      await openLocalFolder(game.savePath);
+    } catch (e) {
+      toast("error", errMsg(e));
+    }
+  }
 
   async function handleRemove() {
     if (!toRemove) return;
@@ -280,10 +503,16 @@ export default function Games() {
         title="Hry"
         subtitle="Automatické zálohovanie save súborov hier na cloud."
         action={
-          <Button variant="primary" onClick={() => setAddOpen(true)}>
-            <PlusIcon className="h-4 w-4" />
-            Pridať hru
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => setCloudOpen(true)}>
+              <DownloadIcon className="h-4 w-4" />
+              Vybrať z cloudu
+            </Button>
+            <Button variant="primary" onClick={() => setAddOpen(true)}>
+              <PlusIcon className="h-4 w-4" />
+              Pridať hru
+            </Button>
+          </div>
         }
       />
 
@@ -291,7 +520,7 @@ export default function Games() {
         <EmptyState
           icon={<GamepadIcon className="h-10 w-10" />}
           message="Žiadne hry"
-          hint="Pridajte hru a vyberte priečinok, kde ukladá svoje save súbory."
+          hint="Pridajte hru a vyberte priečinok so save súbormi, alebo stiahnite existujúcu zálohu cez „Vybrať z cloudu“."
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
@@ -323,9 +552,19 @@ export default function Games() {
                   </div>
                   <Button
                     variant="ghost"
+                    className="!px-1.5 !py-1.5 text-zinc-500 hover:!bg-zinc-700/50 hover:!text-zinc-200"
+                    onClick={() => handleOpenFolder(g)}
+                    aria-label={`Otvoriť priečinok hry ${g.name}`}
+                    title="Otvoriť priečinok so save súbormi"
+                  >
+                    <FolderIcon className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
                     className="!px-1.5 !py-1.5 text-zinc-500 hover:!bg-red-500/10 hover:!text-red-400"
                     onClick={() => setToRemove(g)}
                     aria-label={`Odstrániť hru ${g.name}`}
+                    title="Odstrániť hru"
                   >
                     <TrashIcon className="h-4 w-4" />
                   </Button>
@@ -425,6 +664,8 @@ export default function Games() {
       )}
 
       {addOpen && <AddGameModal onClose={() => setAddOpen(false)} />}
+
+      {cloudOpen && <CloudGamesModal onClose={() => setCloudOpen(false)} />}
 
       {versionsGame && (
         <VersionsModal

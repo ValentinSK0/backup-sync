@@ -67,6 +67,15 @@ export interface CloudFolderBackup {
   alreadyConnected: boolean;
 }
 
+export interface CloudGameBackup {
+  cloudId: string;
+  name: string; // čitateľný názov hry z cloudu
+  latestAt: string | null;
+  versionCount: number;
+  sizeBytes: number;
+  alreadyConnected: boolean;
+}
+
 export interface SyncProgress {
   targetType: "folder" | "game";
   id: string;

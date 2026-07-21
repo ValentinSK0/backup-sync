@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type {
   AppConfig,
   CloudFolderBackup,
+  CloudGameBackup,
   Provider,
   Settings,
   VersionInfo,
@@ -95,6 +96,25 @@ export function restoreGameVersion(
   versionId: string,
 ): Promise<null> {
   return invoke<null>("restore_game_version", { id, versionId });
+}
+
+/** Otvorí sledovaný priečinok (save hry / zálohovaný priečinok) v prieskumníkovi. */
+export function openLocalFolder(path: string): Promise<null> {
+  return invoke<null>("open_local_folder", { path });
+}
+
+/** Zoznam všetkých herných záloh na cloude (na napojenie na tomto PC). */
+export function listGameBackups(): Promise<CloudGameBackup[]> {
+  return invoke<CloudGameBackup[]>("list_game_backups");
+}
+
+/** Stiahne najnovšiu verziu hry z cloudu do zvoleného priečinka a pridá ju. */
+export function connectGameBackup(
+  cloudId: string,
+  path: string,
+  name: string,
+): Promise<AppConfig> {
+  return invoke<AppConfig>("connect_game_backup", { cloudId, path, name });
 }
 
 export function gdriveConnect(): Promise<AppConfig> {

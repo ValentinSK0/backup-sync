@@ -29,6 +29,17 @@ pub struct CloudFolderBackup {
     pub already_connected: bool,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudGameBackup {
+    pub cloud_id: String,
+    pub name: String,           // čitateľný názov hry (z názvu cloud priečinka)
+    pub latest_at: Option<String>,
+    pub version_count: usize,
+    pub size_bytes: u64,
+    pub already_connected: bool,
+}
+
 struct SyncGuard {
     active: Arc<StdMutex<std::collections::HashSet<String>>>,
     key: String,
@@ -198,8 +209,28 @@ fn folder_remote_dir(cloud_name: &str) -> Vec<String> {
     dir
 }
 
+fn games_backups_root() -> Vec<String> {
+    vec!["BackupSync".into(), "games".into()]
+}
+
 fn game_remote_dir(name: &str) -> Vec<String> {
-    vec!["BackupSync".into(), "games".into(), sanitize(name)]
+    let mut dir = games_backups_root();
+    dir.push(sanitize(name));
+    dir
+}
+
+/// Z názvu cloud priečinka spraví čitateľný názov hry (pomlčky/podčiarkovníky → medzery).
+fn prettify_cloud_name(cloud_name: &str) -> String {
+    let pretty = cloud_name
+        .replace(['-', '_'], " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if pretty.is_empty() {
+        cloud_name.to_string()
+    } else {
+        pretty
+    }
 }
 
 fn hash_state_path(app: &AppHandle, folder_id: &str) -> PathBuf {
@@ -992,6 +1023,138 @@ pub async fn restore_game_version(
         Err(error) => emit_progress(app, "game", id, "error", Some(error.clone())),
     }
     result
+}
+
+/// Zoznam všetkých herných záloh na cloude (čitateľne), najnovšie prvé.
+pub async fn list_game_backups(
+    app: &AppHandle,
+    provider: Provider,
+) -> Result<Vec<CloudGameBackup>, String> {
+    let cfg = snapshot(app).await;
+    let storage = make_provider(provider, &cfg)?;
+    let folders = storage.list_folders(&games_backups_root()).await?;
+    let mut backups = Vec::with_capacity(folders.len());
+    for folder in folders {
+        let versions: Vec<_> = storage
+            .list_files_recursive(&folder.id)
+            .await?
+            .into_iter()
+            .filter(|f| f.relative_path.to_lowercase().ends_with(".zip"))
+            .collect();
+        if versions.is_empty() {
+            continue;
+        }
+        let latest_at = versions.iter().filter_map(|f| f.modified_at.clone()).max();
+        let size_bytes = versions
+            .iter()
+            .fold(0u64, |total, f| total.saturating_add(f.size_bytes));
+        let already_connected = cfg
+            .games
+            .iter()
+            .any(|g| g.provider == provider && sanitize(&g.name) == folder.name);
+        backups.push(CloudGameBackup {
+            cloud_id: folder.id,
+            name: prettify_cloud_name(&folder.name),
+            latest_at,
+            version_count: versions.len(),
+            size_bytes,
+            already_connected,
+        });
+    }
+    backups.sort_by(|a, b| {
+        b.latest_at
+            .cmp(&a.latest_at)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+    Ok(backups)
+}
+
+/// Napojí hru z cloudu na tento PC: stiahne najnovšiu verziu do zvoleného priečinka
+/// a pridá ju medzi sledované hry.
+pub async fn connect_game_backup(
+    app: &AppHandle,
+    provider: Provider,
+    cloud_id: &str,
+    destination: &str,
+    display_name: &str,
+) -> Result<AppConfig, String> {
+    if !Path::new(destination).is_dir() {
+        return Err(format!("Cieľový priečinok neexistuje: {destination}"));
+    }
+    let destination_canonical = canonical_path(destination)?;
+    let cfg = snapshot(app).await;
+    for game in &cfg.games {
+        if canonical_path(&game.save_path).ok().as_ref() == Some(&destination_canonical) {
+            return Err("Tento priečinok už používa iná hra.".into());
+        }
+    }
+
+    let storage = make_provider(provider, &cfg)?;
+    let folder = storage
+        .list_folders(&games_backups_root())
+        .await?
+        .into_iter()
+        .find(|folder| folder.id == cloud_id)
+        .ok_or_else(|| "Vybraná herná záloha už na cloude neexistuje.".to_string())?;
+
+    let latest = storage
+        .list_files_recursive(&folder.id)
+        .await?
+        .into_iter()
+        .filter(|f| f.relative_path.to_lowercase().ends_with(".zip"))
+        .max_by(|a, b| a.modified_at.cmp(&b.modified_at))
+        .ok_or_else(|| "Táto herná záloha nemá žiadnu verziu.".to_string())?;
+
+    let name = if display_name.trim().is_empty() {
+        prettify_cloud_name(&folder.name)
+    } else {
+        display_name.trim().to_string()
+    };
+
+    let tmp = std::env::temp_dir().join(format!("backup-sync-game-connect-{}.zip", uuid::Uuid::new_v4()));
+    let staging =
+        std::env::temp_dir().join(format!("backup-sync-game-connect-{}", uuid::Uuid::new_v4()));
+    let destination_path = PathBuf::from(destination);
+    let result = async {
+        storage.download_file(&latest.id, &tmp).await?;
+        std::fs::create_dir_all(&staging).map_err(|e| e.to_string())?;
+        {
+            let archive = tmp.clone();
+            let staging = staging.clone();
+            tokio::task::spawn_blocking(move || crate::archive::unzip_to(&archive, &staging))
+                .await
+                .map_err(|e| e.to_string())??;
+        }
+        suppress_watcher(app, destination, Duration::from_secs(30));
+        {
+            let staging = staging.clone();
+            let destination_path = destination_path.clone();
+            tokio::task::spawn_blocking(move || copy_staged_tree(&staging, &destination_path))
+                .await
+                .map_err(|e| e.to_string())??;
+        }
+        suppress_watcher(app, destination, Duration::from_secs(15));
+        Ok::<(), String>(())
+    }
+    .await;
+    let _ = std::fs::remove_file(&tmp);
+    let _ = std::fs::remove_dir_all(&staging);
+    result?;
+
+    with_config(app, |config| {
+        config.games.push(crate::config::Game {
+            id: uuid::Uuid::new_v4().to_string(),
+            name,
+            save_path: destination.to_string(),
+            provider,
+            auto_upload: Some(false),
+            sync_state: SyncState::Synced,
+            last_change: None,
+            last_upload: Some(now_iso()),
+            last_error: None,
+        });
+    })
+    .await
 }
 
 #[cfg(test)]

@@ -265,6 +265,45 @@ pub async fn restore_game_version(app: AppHandle, id: String, version_id: String
     sync::restore_game_version(&app, &id, &version_id).await
 }
 
+/// Otvorí v prieskumníkovi priečinok, ktorý aplikácia sleduje (save hry alebo zálohovaný priečinok).
+#[tauri::command]
+pub async fn open_local_folder(app: AppHandle, path: String) -> CmdResult<()> {
+    let target = canonical_directory(&path)?;
+    let cfg = sync::snapshot(&app).await;
+    let known = cfg
+        .games
+        .iter()
+        .any(|game| canonical_directory(&game.save_path).is_ok_and(|dir| dir == target))
+        || cfg
+            .watched_folders
+            .iter()
+            .any(|folder| canonical_directory(&folder.path).is_ok_and(|dir| dir == target));
+    if !known {
+        return Err("Tento priečinok aplikácia nesleduje.".into());
+    }
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_path(path, None::<&str>)
+        .map_err(|e| format!("Priečinok sa nepodarilo otvoriť: {e}"))
+}
+
+#[tauri::command]
+pub async fn list_game_backups(app: AppHandle) -> CmdResult<Vec<sync::CloudGameBackup>> {
+    sync::list_game_backups(&app, Provider::Gdrive).await
+}
+
+#[tauri::command]
+pub async fn connect_game_backup(
+    app: AppHandle,
+    cloud_id: String,
+    path: String,
+    name: String,
+) -> CmdResult<AppConfig> {
+    let cfg = sync::connect_game_backup(&app, Provider::Gdrive, &cloud_id, &path, &name).await?;
+    watcher::rebuild(&app, &cfg);
+    Ok(cfg)
+}
+
 #[tauri::command]
 pub async fn gdrive_connect(app: AppHandle) -> CmdResult<AppConfig> {
     let settings = sync::snapshot(&app).await.settings;

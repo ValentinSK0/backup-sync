@@ -20,6 +20,8 @@ Požiadavky: 64-bit Windows 10 alebo Windows 11 a internetové pripojenie pre cl
 - Automaticky sledovať zmeny alebo zálohovať ručne.
 - Zabaliť save priečinok hry do ZIP archívu a uchovávať viac verzií.
 - Obnoviť vybranú verziu herného save.
+- Prehliadať herné zálohy na cloude a stiahnuť ktorúkoľvek z nich do zvoleného priečinka na novom PC.
+- Otvoriť priečinok so save súbormi priamo z karty hry.
 - Nájsť existujúce priečinkové zálohy na Google Drive, stiahnuť ich na novom PC a pripojiť ich pomocou stabilného cloud ID.
 - Po chybe zopakovať upload alebo download bez odstraňovania položky.
 - Uložiť prihlasovacie tokeny vo Windows Credential Manager.
@@ -44,6 +46,16 @@ Nová záloha pripojená z cloudu má automatiku zámerne vypnutú, aby sa hneď
 
 Aplikácia uloží rovnaké cloud ID. Obe PC potom pracujú s rovnakou priečinkovou zálohou.
 
+## Prenos hry na iný PC
+
+1. Na novom PC sa prihlás do rovnakého Google účtu.
+2. Otvor **Hry → Vybrať z cloudu**.
+3. Vyber hru zo zoznamu záloh — vidíš dátum poslednej verzie, počet verzií aj veľkosť.
+4. Skontroluj názov hry a vyber priečinok na tomto PC, kam sa má hra synchronizovať.
+5. Klikni **Stiahnuť a napojiť**.
+
+Stiahne sa najnovšia verzia save a hra sa pridá medzi sledované. Automatické nahrávanie je pre novo napojenú hru zámerne vypnuté.
+
 ## Google Drive
 
 Oficiálny release môže mať OAuth Client ID vložený už pri builde. V Nastaveniach treba zadať aj Client Secret z rovnakého OAuth klienta. Pri vlastnom builde vytvor v Google Cloud Console OAuth 2.0 Client ID typu **Desktop app**, zapni Google Drive API a nastav:
@@ -56,7 +68,7 @@ Aplikácia používa PKCE, kontrolu OAuth `state` a iba scope `drive.file`. Clie
 
 Pre verejný release musí byť OAuth consent screen v Google Cloud nastavený na **In production**. V režime **Testing** fungujú iba testovací používatelia a refresh token môže po siedmich dňoch vypršať.
 
-## Dôležité limity v0.1.0
+## Dôležité limity v0.2.0
 
 - Aplikácia zatiaľ automaticky nerozhoduje, či je novšia lokálna alebo cloud verzia, ani nerieši konflikt zmien z dvoch PC. Smer operácie vyberá používateľ tlačidlom **Zálohovať** alebo **Stiahnuť**.
 - Priečinková záloha prepíše súbor s rovnakou cestou, ale nemaže súbory, ktoré zostali iba na cloude. Obnova prepíše rovnaké lokálne súbory a ostatné lokálne súbory ponechá.
