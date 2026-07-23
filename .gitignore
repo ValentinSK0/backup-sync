@@ -44,3 +44,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Mobilne ikony (appka je len Windows)
+src-tauri/icons/android/
+src-tauri/icons/ios/

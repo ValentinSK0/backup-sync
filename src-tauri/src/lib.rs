@@ -3,6 +3,7 @@ mod commands;
 mod config;
 mod storage;
 mod sync;
+mod tray;
 mod watcher;
 
 use config::{AppConfig, SyncState};
@@ -35,8 +36,21 @@ impl AppState {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // druhé spustenie appky iba zobrazí okno bežiacej inštancie (musí byť prvý plugin)
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            tray::show_main_window(app);
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // zatvorenie okna appku neukončí, iba schová do tray
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .setup(|app| {
             let config_dir = app.path().app_config_dir()?;
             let config_path = config::config_file(&config_dir);
@@ -86,6 +100,7 @@ pub fn run() {
                 watcher_stop: StdMutex::new(None),
             };
             app.manage(state);
+            tray::setup(app.handle())?;
             watcher::rebuild(app.handle(), &cfg);
             Ok(())
         })

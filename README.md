@@ -25,6 +25,14 @@ Požiadavky: 64-bit Windows 10 alebo Windows 11 a internetové pripojenie pre cl
 - Nájsť existujúce priečinkové zálohy na Google Drive, stiahnuť ich na novom PC a pripojiť ich pomocou stabilného cloud ID.
 - Po chybe zopakovať upload alebo download bez odstraňovania položky.
 - Uložiť prihlasovacie tokeny vo Windows Credential Manager.
+- Bežať na pozadí v systémovej lište: zatvorenie okna appku neukončí, sledovanie beží ďalej.
+
+## Systémová lišta (tray)
+
+- Zatvorenie okna krížikom appku iba schová do lišty — sledovanie a automatické zálohy bežia ďalej.
+- Ľavý klik na ikonu v lište otvorí okno; pravý klik ponúkne **Otvoriť Backup Sync** a **Ukončiť**.
+- Appku naozaj vypneš iba cez **Ukončiť** v lište.
+- Druhé spustenie appky neotvorí novú inštanciu, len zobrazí okno bežiacej.
 
 ## Globálne / zapnuté / vypnuté
 
@@ -68,7 +76,7 @@ Aplikácia používa PKCE, kontrolu OAuth `state` a iba scope `drive.file`. Clie
 
 Pre verejný release musí byť OAuth consent screen v Google Cloud nastavený na **In production**. V režime **Testing** fungujú iba testovací používatelia a refresh token môže po siedmich dňoch vypršať.
 
-## Dôležité limity v0.2.0
+## Dôležité limity v0.3.0
 
 - Aplikácia zatiaľ automaticky nerozhoduje, či je novšia lokálna alebo cloud verzia, ani nerieši konflikt zmien z dvoch PC. Smer operácie vyberá používateľ tlačidlom **Zálohovať** alebo **Stiahnuť**.
 - Priečinková záloha prepíše súbor s rovnakou cestou, ale nemaže súbory, ktoré zostali iba na cloude. Obnova prepíše rovnaké lokálne súbory a ostatné lokálne súbory ponechá.

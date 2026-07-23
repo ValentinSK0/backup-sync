@@ -1,0 +1,30 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Zdroj loga Backup Sync. Render: node scripts/render-icon.mjs && npx tauri icon app-icon.png -->
+  <defs>
+    <linearGradient id="bg" gradientUnits="userSpaceOnUse" x1="64" y1="64" x2="960" y2="960">
+      <stop offset="0" stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="shine" gradientUnits="userSpaceOnUse" x1="512" y1="64" x2="512" y2="560">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- podklad -->
+  <rect x="64" y="64" width="896" height="896" rx="212" fill="url(#bg)"/>
+  <rect x="64" y="64" width="896" height="896" rx="212" fill="url(#shine)"/>
+
+  <!-- oblak: zjednotenie dvoch kruhov a zaobleneho obdlznika (rovnaka biela vypln) -->
+  <g fill="#ffffff">
+    <circle cx="430" cy="490" r="150"/>
+    <circle cx="625" cy="535" r="110"/>
+    <rect x="280" y="530" width="460" height="165" rx="82"/>
+  </g>
+
+  <!-- sipka nahor "vyrezana" z oblaku (vypln presne kopiruje gradient podkladu) -->
+  <g fill="url(#bg)">
+    <path d="M 512 415 L 617 545 L 407 545 Z"/>
+    <rect x="478" y="535" width="68" height="120" rx="10"/>
+  </g>
+</svg>
