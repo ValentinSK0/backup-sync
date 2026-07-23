@@ -76,7 +76,7 @@ Aplikácia používa PKCE, kontrolu OAuth `state` a iba scope `drive.file`. Clie
 
 Pre verejný release musí byť OAuth consent screen v Google Cloud nastavený na **In production**. V režime **Testing** fungujú iba testovací používatelia a refresh token môže po siedmich dňoch vypršať.
 
-## Dôležité limity v0.3.0
+## Dôležité limity v0.3.1
 
 - Aplikácia zatiaľ automaticky nerozhoduje, či je novšia lokálna alebo cloud verzia, ani nerieši konflikt zmien z dvoch PC. Smer operácie vyberá používateľ tlačidlom **Zálohovať** alebo **Stiahnuť**.
 - Priečinková záloha prepíše súbor s rovnakou cestou, ale nemaže súbory, ktoré zostali iba na cloude. Obnova prepíše rovnaké lokálne súbory a ostatné lokálne súbory ponechá.

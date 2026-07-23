@@ -1,6 +1,6 @@
 [package]
 name = "backup-sync"
-version = "0.3.0"
+version = "0.3.1"
 description = "Windows desktop backup app for folders and game saves"
 authors = ["Valentin"]
 edition = "2021"
