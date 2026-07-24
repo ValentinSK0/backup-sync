@@ -12,6 +12,7 @@ import {
   uploadGameSave,
 } from "../api";
 import { ConfirmDialog, Modal } from "../components/Modal";
+import ProviderMenu from "../components/ProviderMenu";
 import StateBadge from "../components/StateBadge";
 import {
   CloudIcon,
@@ -157,10 +158,12 @@ function VersionsModal({ game, onClose }: { game: Game; onClose: () => void }) {
 }
 
 function ConnectGameModal({
+  provider,
   backup,
   onClose,
   onDone,
 }: {
+  provider: Provider;
   backup: CloudGameBackup;
   onClose: () => void;
   onDone: () => void;
@@ -193,7 +196,7 @@ function ConnectGameModal({
     }
     const ok = await run(
       "connectGame",
-      () => connectGameBackup(backup.cloudId, destination, trimmed),
+      () => connectGameBackup(provider, backup.cloudId, destination, trimmed),
       `Hra „${trimmed}“ bola stiahnutá z cloudu a napojená.`,
     );
     if (ok) onDone();
@@ -264,7 +267,13 @@ function ConnectGameModal({
   );
 }
 
-function CloudGamesModal({ onClose }: { onClose: () => void }) {
+function CloudGamesModal({
+  provider,
+  onClose,
+}: {
+  provider: Provider;
+  onClose: () => void;
+}) {
   const [backups, setBackups] = useState<CloudGameBackup[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -274,7 +283,7 @@ function CloudGamesModal({ onClose }: { onClose: () => void }) {
     let cancelled = false;
     setBackups(null);
     setLoadError(null);
-    listGameBackups()
+    listGameBackups(provider)
       .then((b) => {
         if (!cancelled) setBackups(b);
       })
@@ -284,14 +293,18 @@ function CloudGamesModal({ onClose }: { onClose: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [reloadKey]);
+  }, [provider, reloadKey]);
 
   return (
     <>
-      <Modal title="Vybrať z cloudu" onClose={onClose} wide>
+      <Modal
+        title={`Vybrať z cloudu — ${providerLabel(provider)}`}
+        onClose={onClose}
+        wide
+      >
         <p className="mb-4 text-sm text-zinc-400">
-          Herné save súbory zálohované na tvojom cloude. Vyber hru a priečinok
-          na tomto PC, kam sa má stiahnuť.
+          Herné save súbory zálohované na {providerLabel(provider)}. Vyber hru a
+          priečinok na tomto PC, kam sa má stiahnuť.
         </p>
 
         {loadError ? (
@@ -353,6 +366,7 @@ function CloudGamesModal({ onClose }: { onClose: () => void }) {
 
       {selected && (
         <ConnectGameModal
+          provider={provider}
           backup={selected}
           onClose={() => setSelected(null)}
           onDone={() => {
@@ -451,6 +465,7 @@ function AddGameModal({ onClose }: { onClose: () => void }) {
             onChange={(e) => setProvider(e.currentTarget.value as Provider)}
           >
             <option value="gdrive">Google Drive</option>
+            <option value="ulozto">Ulož.to Disk</option>
             <option value="customCloud">Vlastný cloud</option>
           </select>
         </div>
@@ -475,7 +490,7 @@ export default function Games() {
   const [toRemove, setToRemove] = useState<Game | null>(null);
   const [versionsGame, setVersionsGame] = useState<Game | null>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [cloudOpen, setCloudOpen] = useState(false);
+  const [cloudProvider, setCloudProvider] = useState<Provider | null>(null);
 
   const games = config.games;
 
@@ -504,10 +519,11 @@ export default function Games() {
         subtitle="Automatické zálohovanie save súborov hier na cloud."
         action={
           <div className="flex items-center gap-2">
-            <Button variant="secondary" onClick={() => setCloudOpen(true)}>
-              <DownloadIcon className="h-4 w-4" />
-              Vybrať z cloudu
-            </Button>
+            <ProviderMenu
+              label="Vybrať z cloudu"
+              icon={<DownloadIcon className="h-4 w-4" />}
+              onSelect={setCloudProvider}
+            />
             <Button variant="primary" onClick={() => setAddOpen(true)}>
               <PlusIcon className="h-4 w-4" />
               Pridať hru
@@ -665,7 +681,12 @@ export default function Games() {
 
       {addOpen && <AddGameModal onClose={() => setAddOpen(false)} />}
 
-      {cloudOpen && <CloudGamesModal onClose={() => setCloudOpen(false)} />}
+      {cloudProvider && (
+        <CloudGamesModal
+          provider={cloudProvider}
+          onClose={() => setCloudProvider(null)}
+        />
+      )}
 
       {versionsGame && (
         <VersionsModal

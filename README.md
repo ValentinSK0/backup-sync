@@ -1,6 +1,6 @@
 # Backup Sync
 
-Windows aplikácia na ručné alebo automatické zálohovanie priečinkov a herných save súborov na Google Drive alebo vlastný cloud.
+Windows aplikácia na ručné alebo automatické zálohovanie priečinkov a herných save súborov na Google Drive, Ulož.to Disk alebo vlastný cloud.
 
 ## Inštalácia
 
@@ -20,9 +20,9 @@ Požiadavky: 64-bit Windows 10 alebo Windows 11 a internetové pripojenie pre cl
 - Automaticky sledovať zmeny alebo zálohovať ručne.
 - Zabaliť save priečinok hry do ZIP archívu a uchovávať viac verzií.
 - Obnoviť vybranú verziu herného save.
-- Prehliadať herné zálohy na cloude a stiahnuť ktorúkoľvek z nich do zvoleného priečinka na novom PC.
+- Zálohovať na výber medzi Google Drive, Ulož.to Diskom a vlastným cloudom — cloud sa volí pri každej hre a priečinku.
+- Prehliadať herné aj priečinkové zálohy na zvolenom cloude a stiahnuť ktorúkoľvek z nich do vybraného priečinka na novom PC.
 - Otvoriť priečinok so save súbormi priamo z karty hry.
-- Nájsť existujúce priečinkové zálohy na Google Drive, stiahnuť ich na novom PC a pripojiť ich pomocou stabilného cloud ID.
 - Po chybe zopakovať upload alebo download bez odstraňovania položky.
 - Uložiť prihlasovacie tokeny vo Windows Credential Manager.
 - Bežať na pozadí v systémovej lište: zatvorenie okna appku neukončí, sledovanie beží ďalej.
@@ -64,6 +64,17 @@ Aplikácia uloží rovnaké cloud ID. Obe PC potom pracujú s rovnakou priečink
 
 Stiahne sa najnovšia verzia save a hra sa pridá medzi sledované. Automatické nahrávanie je pre novo napojenú hru zámerne vypnuté.
 
+## Ulož.to Disk
+
+Tretí podporovaný cloud. V **Nastavenia → Ulož.to Disk** zadaj svoj **login** a **aplikačný token**
+(vygeneruješ na webe Ulož.to v Nastaveniach — používa sa namiesto hesla). Voliteľne vlož vlastný
+**API kľúč aplikácie** (žiada sa od podpory Ulož.to); bez neho sa použije verejný testovací kľúč
+z dokumentácie, ktorý sa môže kedykoľvek zmeniť.
+
+Upload beží cez oficiálne resumable API (bloky po 4 MB, prerušený prenos sa opakuje),
+sťahovanie cez rýchly odkaz pre vlastné súbory. Tokeny sa ukladajú iba do Windows Credential
+Manager. Pri hrách aj priečinkoch stačí pri pridávaní vybrať cloud **Ulož.to Disk**.
+
 ## Google Drive
 
 Oficiálny release môže mať OAuth Client ID vložený už pri builde. V Nastaveniach treba zadať aj Client Secret z rovnakého OAuth klienta. Pri vlastnom builde vytvor v Google Cloud Console OAuth 2.0 Client ID typu **Desktop app**, zapni Google Drive API a nastav:
@@ -76,7 +87,7 @@ Aplikácia používa PKCE, kontrolu OAuth `state` a iba scope `drive.file`. Clie
 
 Pre verejný release musí byť OAuth consent screen v Google Cloud nastavený na **In production**. V režime **Testing** fungujú iba testovací používatelia a refresh token môže po siedmich dňoch vypršať.
 
-## Dôležité limity v0.3.1
+## Dôležité limity v0.4.0
 
 - Aplikácia zatiaľ automaticky nerozhoduje, či je novšia lokálna alebo cloud verzia, ani nerieši konflikt zmien z dvoch PC. Smer operácie vyberá používateľ tlačidlom **Zálohovať** alebo **Stiahnuť**.
 - Priečinková záloha prepíše súbor s rovnakou cestou, ale nemaže súbory, ktoré zostali iba na cloude. Obnova prepíše rovnaké lokálne súbory a ostatné lokálne súbory ponechá.

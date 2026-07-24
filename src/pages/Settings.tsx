@@ -5,6 +5,8 @@ import {
   gdriveConnect,
   gdriveDisconnect,
   saveGdriveCredentials,
+  uloztoLogin,
+  uloztoLogout,
   updateSettings,
 } from "../api";
 import { CloudIcon } from "../components/icons";
@@ -183,8 +185,40 @@ export default function Settings() {
     }
   }
 
+  // --- Sekcia 4: Ulož.to Disk (login + aplikačný token) ---
+  const [uloztoUser, setUloztoUser] = useState("");
+  const [uloztoToken, setUloztoToken] = useState("");
+  const [uloztoAppKey, setUloztoAppKey] = useState("");
+  const [uloztoLoggingIn, setUloztoLoggingIn] = useState(false);
+
+  async function handleUloztoLogin() {
+    if (!uloztoUser.trim() || !uloztoToken.trim()) {
+      toast("error", "Vyplňte Ulož.to login aj aplikačný token.");
+      return;
+    }
+    setUloztoLoggingIn(true);
+    try {
+      const cfg = await uloztoLogin(
+        uloztoUser.trim(),
+        uloztoToken.trim(),
+        uloztoAppKey.trim(),
+      );
+      setConfig(cfg);
+      toast("success", "Prihlásenie do Ulož.to úspešné.");
+      setUloztoUser("");
+    } catch (e) {
+      toast("error", typeof e === "string" ? e : String(e));
+    } finally {
+      // tokeny nedržíme v state dlhšie, než je nutné
+      setUloztoToken("");
+      setUloztoAppKey("");
+      setUloztoLoggingIn(false);
+    }
+  }
+
   const gdrive = config.providers.gdrive;
   const custom = config.providers.customCloud;
+  const ulozto = config.providers.ulozto;
 
   return (
     <div>
@@ -375,6 +409,98 @@ export default function Settings() {
                 </>
               )}
             </div>
+          </div>
+        </Section>
+
+        <Section
+          title="Ulož.to Disk"
+          description="Prihlásenie loginom a aplikačným tokenom (Ulož.to → Nastavenia → aplikačný login token)."
+        >
+          <div className="flex flex-col gap-4">
+            <StatusRow status={ulozto} label="prihláste sa nižšie" />
+
+            {ulozto.connected ? (
+              <div>
+                <Button
+                  variant="secondary"
+                  loading={busy === "uloztoLogout"}
+                  onClick={() =>
+                    run(
+                      "uloztoLogout",
+                      uloztoLogout,
+                      "Odhlásenie z Ulož.to úspešné.",
+                    )
+                  }
+                >
+                  Odhlásiť
+                </Button>
+              </div>
+            ) : (
+              <form
+                className="flex flex-col gap-3"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void handleUloztoLogin();
+                }}
+              >
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelCls} htmlFor="ul-login">
+                      Login
+                    </label>
+                    <input
+                      id="ul-login"
+                      className={inputCls}
+                      value={uloztoUser}
+                      onChange={(e) => setUloztoUser(e.currentTarget.value)}
+                      autoComplete="username"
+                      spellCheck={false}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls} htmlFor="ul-token">
+                      Aplikačný token
+                    </label>
+                    <input
+                      id="ul-token"
+                      type="password"
+                      className={inputCls}
+                      value={uloztoToken}
+                      onChange={(e) => setUloztoToken(e.currentTarget.value)}
+                      autoComplete="off"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls} htmlFor="ul-appkey">
+                    API kľúč aplikácie (voliteľný)
+                  </label>
+                  <input
+                    id="ul-appkey"
+                    type="password"
+                    className={inputCls}
+                    value={uloztoAppKey}
+                    onChange={(e) => setUloztoAppKey(e.currentTarget.value)}
+                    placeholder="prázdne = verejný testovací kľúč"
+                    autoComplete="off"
+                  />
+                  <p className="mt-1.5 text-xs text-zinc-500">
+                    Vlastný API kľúč sa žiada od podpory Ulož.to. Bez neho sa
+                    použije verejný testovací kľúč, ktorý sa môže kedykoľvek
+                    zmeniť.
+                  </p>
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    variant="primary"
+                    type="submit"
+                    loading={uloztoLoggingIn}
+                  >
+                    Prihlásiť
+                  </Button>
+                </div>
+              </form>
+            )}
           </div>
         </Section>
 

@@ -1,4 +1,4 @@
-export type Provider = "gdrive" | "customCloud";
+export type Provider = "gdrive" | "customCloud" | "ulozto";
 export type SyncState = "idle" | "changed" | "syncing" | "synced" | "error";
 export type CompressionLevel = "fast" | "best";
 
@@ -47,7 +47,11 @@ export interface Settings {
 export interface AppConfig {
   watchedFolders: WatchedFolder[];
   games: Game[];
-  providers: { gdrive: ProviderStatus; customCloud: ProviderStatus };
+  providers: {
+    gdrive: ProviderStatus;
+    customCloud: ProviderStatus;
+    ulozto: ProviderStatus;
+  };
   settings: Settings;
 }
 

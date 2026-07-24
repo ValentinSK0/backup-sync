@@ -41,7 +41,14 @@ export function formatBytes(bytes: number): string {
 }
 
 export function providerLabel(provider: Provider): string {
-  return provider === "gdrive" ? "Google Drive" : "Vlastný cloud";
+  switch (provider) {
+    case "gdrive":
+      return "Google Drive";
+    case "ulozto":
+      return "Ulož.to Disk";
+    default:
+      return "Vlastný cloud";
+  }
 }
 
 /** Posledná časť cesty (názov priečinka). */

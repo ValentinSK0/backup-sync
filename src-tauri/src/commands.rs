@@ -228,17 +228,21 @@ pub async fn backup_folder_now(app: AppHandle, id: String) -> CmdResult<AppConfi
 }
 
 #[tauri::command]
-pub async fn list_folder_backups(app: AppHandle) -> CmdResult<Vec<sync::CloudFolderBackup>> {
-    sync::list_folder_backups(&app, Provider::Gdrive).await
+pub async fn list_folder_backups(
+    app: AppHandle,
+    provider: Provider,
+) -> CmdResult<Vec<sync::CloudFolderBackup>> {
+    sync::list_folder_backups(&app, provider).await
 }
 
 #[tauri::command]
 pub async fn connect_folder_backup(
     app: AppHandle,
+    provider: Provider,
     cloud_id: String,
     path: String,
 ) -> CmdResult<AppConfig> {
-    let cfg = sync::connect_folder_backup(&app, Provider::Gdrive, &cloud_id, &path).await?;
+    let cfg = sync::connect_folder_backup(&app, provider, &cloud_id, &path).await?;
     watcher::rebuild(&app, &cfg);
     Ok(cfg)
 }
@@ -288,18 +292,22 @@ pub async fn open_local_folder(app: AppHandle, path: String) -> CmdResult<()> {
 }
 
 #[tauri::command]
-pub async fn list_game_backups(app: AppHandle) -> CmdResult<Vec<sync::CloudGameBackup>> {
-    sync::list_game_backups(&app, Provider::Gdrive).await
+pub async fn list_game_backups(
+    app: AppHandle,
+    provider: Provider,
+) -> CmdResult<Vec<sync::CloudGameBackup>> {
+    sync::list_game_backups(&app, provider).await
 }
 
 #[tauri::command]
 pub async fn connect_game_backup(
     app: AppHandle,
+    provider: Provider,
     cloud_id: String,
     path: String,
     name: String,
 ) -> CmdResult<AppConfig> {
-    let cfg = sync::connect_game_backup(&app, Provider::Gdrive, &cloud_id, &path, &name).await?;
+    let cfg = sync::connect_game_backup(&app, provider, &cloud_id, &path, &name).await?;
     watcher::rebuild(&app, &cfg);
     Ok(cfg)
 }
@@ -362,6 +370,62 @@ pub async fn custom_cloud_login(
         storage::keyring_delete(custom::TOKEN_KEY);
     }
     result
+}
+
+#[tauri::command]
+pub async fn ulozto_login(
+    app: AppHandle,
+    login: String,
+    auth_token: String,
+    app_token: String,
+) -> CmdResult<AppConfig> {
+    use crate::storage::ulozto;
+    let login = login.trim().to_string();
+    let auth_token = auth_token.trim().to_string();
+    let app_token = {
+        let trimmed = app_token.trim();
+        if trimmed.is_empty() {
+            ulozto::TEST_APP_TOKEN.to_string()
+        } else {
+            trimmed.to_string()
+        }
+    };
+    if login.is_empty() || auth_token.is_empty() {
+        return Err("Vyplň Ulož.to login aj aplikačný token.".into());
+    }
+    // over prihlásenie ešte pred uložením tokenov; session si odlož na ďalšie volania
+    let session = ulozto::login(&login, &auth_token, &app_token).await?;
+    storage::keyring_set(ulozto::AUTH_TOKEN_KEY, &auth_token)?;
+    storage::keyring_set(ulozto::APP_TOKEN_KEY, &app_token)?;
+    let _ = storage::keyring_set(ulozto::SESSION_KEY, &session);
+    let result = sync::with_config(&app, |c| {
+        c.providers.ulozto.connected = true;
+        c.providers.ulozto.account = Some(login);
+        c.providers.ulozto.error = None;
+    })
+    .await;
+    if result.is_err() {
+        storage::keyring_delete(ulozto::AUTH_TOKEN_KEY);
+        storage::keyring_delete(ulozto::APP_TOKEN_KEY);
+        storage::keyring_delete(ulozto::SESSION_KEY);
+    }
+    result
+}
+
+#[tauri::command]
+pub async fn ulozto_logout(app: AppHandle) -> CmdResult<AppConfig> {
+    use crate::storage::ulozto;
+    if sync::has_active_syncs(&app) {
+        return Err("Počkaj na dokončenie synchronizácie a potom odpoj Ulož.to.".into());
+    }
+    let config = sync::with_config(&app, |c| {
+        c.providers.ulozto = Default::default();
+    })
+    .await?;
+    storage::keyring_delete(ulozto::AUTH_TOKEN_KEY);
+    storage::keyring_delete(ulozto::APP_TOKEN_KEY);
+    storage::keyring_delete(ulozto::SESSION_KEY);
+    Ok(config)
 }
 
 #[tauri::command]

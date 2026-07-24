@@ -9,6 +9,8 @@ pub enum Provider {
     Gdrive,
     #[serde(rename = "customCloud")]
     CustomCloud,
+    #[serde(rename = "ulozto")]
+    Ulozto,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -93,6 +95,8 @@ pub struct Providers {
     pub gdrive: ProviderStatus,
     #[serde(default)]
     pub custom_cloud: ProviderStatus,
+    #[serde(default)]
+    pub ulozto: ProviderStatus,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -128,6 +128,8 @@ pub fn run() {
             commands::gdrive_disconnect,
             commands::custom_cloud_login,
             commands::custom_cloud_logout,
+            commands::ulozto_login,
+            commands::ulozto_logout,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

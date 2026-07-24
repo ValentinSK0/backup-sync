@@ -1,5 +1,6 @@
 pub mod custom;
 pub mod gdrive;
+pub mod ulozto;
 
 use crate::config::{AppConfig, Provider};
 use serde::Serialize;
@@ -121,6 +122,21 @@ pub fn make_provider(
             let token = keyring_get(custom::TOKEN_KEY)
                 .map_err(|_| "Token vlastného cloudu sa nenašiel. Prihlás sa znova.".to_string())?;
             Ok(Box::new(custom::CustomCloud::new(endpoint, token)?))
+        }
+        Provider::Ulozto => {
+            let status = &config.providers.ulozto;
+            if !status.connected {
+                return Err("Ulož.to nie je pripojené. Prihlás sa v Nastaveniach.".into());
+            }
+            let login = status
+                .account
+                .clone()
+                .ok_or_else(|| "Chýba Ulož.to login. Prihlás sa znova.".to_string())?;
+            let auth_token = keyring_get(ulozto::AUTH_TOKEN_KEY)
+                .map_err(|_| "Ulož.to token sa nenašiel. Prihlás sa znova v Nastaveniach.".to_string())?;
+            let app_token = keyring_get(ulozto::APP_TOKEN_KEY)
+                .unwrap_or_else(|_| ulozto::TEST_APP_TOKEN.to_string());
+            Ok(Box::new(ulozto::Ulozto::new(login, auth_token, app_token)?))
         }
     }
 }

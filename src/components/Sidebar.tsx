@@ -84,6 +84,12 @@ export default function Sidebar({
         </div>
         <div className="flex items-center gap-2">
           <span
+            className={`h-2 w-2 rounded-full ${config.providers.ulozto.connected ? "bg-emerald-400" : "bg-zinc-700"}`}
+          />
+          <span>Ulož.to Disk</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span
             className={`h-2 w-2 rounded-full ${config.providers.customCloud.connected ? "bg-emerald-400" : "bg-zinc-700"}`}
           />
           <span>Vlastný cloud</span>

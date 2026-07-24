@@ -68,15 +68,22 @@ export function backupFolderNow(id: string): Promise<AppConfig> {
   return invoke<AppConfig>("backup_folder_now", { id });
 }
 
-export function listFolderBackups(): Promise<CloudFolderBackup[]> {
-  return invoke<CloudFolderBackup[]>("list_folder_backups");
+export function listFolderBackups(
+  provider: Provider,
+): Promise<CloudFolderBackup[]> {
+  return invoke<CloudFolderBackup[]>("list_folder_backups", { provider });
 }
 
 export function connectFolderBackup(
+  provider: Provider,
   cloudId: string,
   path: string,
 ): Promise<AppConfig> {
-  return invoke<AppConfig>("connect_folder_backup", { cloudId, path });
+  return invoke<AppConfig>("connect_folder_backup", {
+    provider,
+    cloudId,
+    path,
+  });
 }
 
 export function restoreFolderFromCloud(id: string): Promise<AppConfig> {
@@ -103,18 +110,26 @@ export function openLocalFolder(path: string): Promise<null> {
   return invoke<null>("open_local_folder", { path });
 }
 
-/** Zoznam všetkých herných záloh na cloude (na napojenie na tomto PC). */
-export function listGameBackups(): Promise<CloudGameBackup[]> {
-  return invoke<CloudGameBackup[]>("list_game_backups");
+/** Zoznam všetkých herných záloh na zvolenom cloude (na napojenie na tomto PC). */
+export function listGameBackups(
+  provider: Provider,
+): Promise<CloudGameBackup[]> {
+  return invoke<CloudGameBackup[]>("list_game_backups", { provider });
 }
 
 /** Stiahne najnovšiu verziu hry z cloudu do zvoleného priečinka a pridá ju. */
 export function connectGameBackup(
+  provider: Provider,
   cloudId: string,
   path: string,
   name: string,
 ): Promise<AppConfig> {
-  return invoke<AppConfig>("connect_game_backup", { cloudId, path, name });
+  return invoke<AppConfig>("connect_game_backup", {
+    provider,
+    cloudId,
+    path,
+    name,
+  });
 }
 
 export function gdriveConnect(): Promise<AppConfig> {
@@ -139,6 +154,19 @@ export function customCloudLogin(
 
 export function customCloudLogout(): Promise<AppConfig> {
   return invoke<AppConfig>("custom_cloud_logout");
+}
+
+/** Prihlásenie do Ulož.to (login + aplikačný token; API kľúč voliteľný). */
+export function uloztoLogin(
+  login: string,
+  authToken: string,
+  appToken: string,
+): Promise<AppConfig> {
+  return invoke<AppConfig>("ulozto_login", { login, authToken, appToken });
+}
+
+export function uloztoLogout(): Promise<AppConfig> {
+  return invoke<AppConfig>("ulozto_logout");
 }
 
 /** Otvorí natívny dialóg pre výber priečinka. Vráti cestu alebo null (zrušené). */

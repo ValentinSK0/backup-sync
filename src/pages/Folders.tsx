@@ -10,6 +10,7 @@ import {
   setFolderAutoBackup,
 } from "../api";
 import { ConfirmDialog, Modal } from "../components/Modal";
+import ProviderMenu from "../components/ProviderMenu";
 import StateBadge from "../components/StateBadge";
 import {
   DownloadIcon,
@@ -36,7 +37,7 @@ import {
   providerLabel,
 } from "../format";
 import { useConfigAction } from "../hooks";
-import type { CloudFolderBackup, WatchedFolder } from "../types";
+import type { CloudFolderBackup, Provider, WatchedFolder } from "../types";
 
 type AutoBackupOption = "inherit" | "on" | "off";
 
@@ -50,7 +51,13 @@ function optionToAutoBackup(option: AutoBackupOption): boolean | null {
   return option === "on";
 }
 
-function ConnectCloudBackupModal({ onClose }: { onClose: () => void }) {
+function ConnectCloudBackupModal({
+  provider,
+  onClose,
+}: {
+  provider: Provider;
+  onClose: () => void;
+}) {
   const { setConfig, toast } = useApp();
   const [backups, setBackups] = useState<CloudFolderBackup[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -63,14 +70,14 @@ function ConnectCloudBackupModal({ onClose }: { onClose: () => void }) {
   const load = useCallback(() => {
     setBackups(null);
     setLoadError(null);
-    listFolderBackups()
+    listFolderBackups(provider)
       .then((items) => {
         setBackups(items);
         const available = items.find((item) => !item.alreadyConnected);
         setSelectedId(available?.cloudId ?? null);
       })
       .catch((error) => setLoadError(errMsg(error)));
-  }, []);
+  }, [provider]);
 
   useEffect(() => {
     load();
@@ -94,7 +101,11 @@ function ConnectCloudBackupModal({ onClose }: { onClose: () => void }) {
     setConnecting(true);
     setActionError(null);
     try {
-      const config = await connectFolderBackup(selectedId, destination);
+      const config = await connectFolderBackup(
+        provider,
+        selectedId,
+        destination,
+      );
       setConfig(config);
       toast("success", "Záloha stiahnutá a priečinok pripojený.");
       onClose();
@@ -118,7 +129,7 @@ function ConnectCloudBackupModal({ onClose }: { onClose: () => void }) {
       <div className="flex flex-col gap-4">
         <div>
           <div className="mb-2 text-xs font-medium text-zinc-400">
-            1. Vyber zálohu z Google Drive
+            1. Vyber zálohu z {providerLabel(provider)}
           </div>
           {loadError ? (
             <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-3">
@@ -134,7 +145,7 @@ function ConnectCloudBackupModal({ onClose }: { onClose: () => void }) {
             </div>
           ) : backups.length === 0 ? (
             <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4 text-center text-sm text-zinc-500">
-              Na Google Drive nie sú žiadne zálohy priečinkov.
+              Na {providerLabel(provider)} nie sú žiadne zálohy priečinkov.
             </div>
           ) : (
             <div className="flex max-h-64 flex-col gap-2 overflow-y-auto pr-1">
@@ -243,19 +254,19 @@ export default function Folders() {
   const [toRemove, setToRemove] = useState<WatchedFolder | null>(null);
   const [toRestore, setToRestore] = useState<WatchedFolder | null>(null);
   const [adding, setAdding] = useState(false);
-  const [connectOpen, setConnectOpen] = useState(false);
+  const [connectProvider, setConnectProvider] = useState<Provider | null>(null);
 
   const folders = config.watchedFolders;
 
-  async function handleAdd() {
+  async function handleAdd(provider: Provider) {
     setAdding(true);
     try {
       const path = await pickFolder();
       if (path) {
         await run(
           "add",
-          () => addWatchedFolder(path, "gdrive"),
-          "Priečinok pridaný do sledovania.",
+          () => addWatchedFolder(path, provider),
+          `Priečinok pridaný do sledovania (${providerLabel(provider)}).`,
         );
       }
     } finally {
@@ -288,14 +299,18 @@ export default function Folders() {
         subtitle="Priečinky môžeš zálohovať ručne, automaticky alebo pripojiť z cloudu."
         action={
           <div className="flex items-center gap-2">
-            <Button variant="secondary" onClick={() => setConnectOpen(true)}>
-              <LinkIcon className="h-4 w-4" />
-              Pripojiť z cloudu
-            </Button>
-            <Button variant="primary" onClick={handleAdd} loading={adding}>
-              <PlusIcon className="h-4 w-4" />
-              Pridať nový
-            </Button>
+            <ProviderMenu
+              label="Pripojiť z cloudu"
+              icon={<LinkIcon className="h-4 w-4" />}
+              onSelect={setConnectProvider}
+            />
+            <ProviderMenu
+              label="Pridať nový"
+              variant="primary"
+              icon={<PlusIcon className="h-4 w-4" />}
+              disabled={adding}
+              onSelect={(provider) => void handleAdd(provider)}
+            />
           </div>
         }
       />
@@ -454,8 +469,11 @@ export default function Folders() {
         </div>
       )}
 
-      {connectOpen && (
-        <ConnectCloudBackupModal onClose={() => setConnectOpen(false)} />
+      {connectProvider && (
+        <ConnectCloudBackupModal
+          provider={connectProvider}
+          onClose={() => setConnectProvider(null)}
+        />
       )}
 
       {toRestore && (
