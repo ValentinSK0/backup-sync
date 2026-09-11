@@ -33,7 +33,7 @@ pub struct CloudFolderBackup {
 #[serde(rename_all = "camelCase")]
 pub struct CloudGameBackup {
     pub cloud_id: String,
-    pub name: String,           // čitateľný názov hry (z názvu cloud priečinka)
+    pub name: String, // čitateľný názov hry (z názvu cloud priečinka)
     pub latest_at: Option<String>,
     pub version_count: usize,
     pub size_bytes: u64,
@@ -171,6 +171,46 @@ fn sanitize(name: &str) -> String {
     } else {
         trimmed
     }
+}
+
+fn contains_local_save_files(root: &Path) -> Result<bool, String> {
+    if !root.exists() {
+        return Ok(false);
+    }
+    for entry in walkdir::WalkDir::new(root).min_depth(1) {
+        let entry = entry.map_err(|e| format!("Čítanie pôvodného save priečinka zlyhalo: {e}"))?;
+        if entry.file_type().is_file() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn backup_local_save_before_cloud(
+    destination: &Path,
+    game_name: &str,
+    level: crate::config::CompressionLevel,
+) -> Result<Option<PathBuf>, String> {
+    if !contains_local_save_files(destination)? {
+        return Ok(None);
+    }
+    let parent = destination.parent().ok_or_else(|| {
+        format!(
+            "Pôvodný save sa nedá zazálohovať: priečinok nemá nadradenú cestu: {}",
+            destination.display()
+        )
+    })?;
+    let backup_dir = parent.join("Backup Sync local saves");
+    let stamp = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S-%3f");
+    let archive = backup_dir.join(format!(
+        "{}_local-before-cloud_{}-{}.zip",
+        sanitize(game_name),
+        stamp,
+        uuid::Uuid::new_v4()
+    ));
+    crate::archive::zip_dir_to(destination, &archive, level)
+        .map_err(|e| format!("Pôvodný save sa nepodarilo zazálohovať: {e}"))?;
+    Ok(Some(archive))
 }
 
 pub fn folder_cloud_name(path: &str, id: &str) -> String {
@@ -1111,10 +1151,22 @@ pub async fn connect_game_backup(
         display_name.trim().to_string()
     };
 
-    let tmp = std::env::temp_dir().join(format!("backup-sync-game-connect-{}.zip", uuid::Uuid::new_v4()));
+    let tmp = std::env::temp_dir().join(format!(
+        "backup-sync-game-connect-{}.zip",
+        uuid::Uuid::new_v4()
+    ));
     let staging =
         std::env::temp_dir().join(format!("backup-sync-game-connect-{}", uuid::Uuid::new_v4()));
     let destination_path = PathBuf::from(destination);
+    let backup_destination = destination_path.clone();
+    let backup_game_name = name.clone();
+    let backup_level = cfg.settings.compression_level;
+    let _local_backup = tokio::task::spawn_blocking(move || {
+        backup_local_save_before_cloud(&backup_destination, &backup_game_name, backup_level)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
     let result = async {
         storage.download_file(&latest.id, &tmp).await?;
         std::fs::create_dir_all(&staging).map_err(|e| e.to_string())?;
@@ -1171,6 +1223,45 @@ mod tests {
             folder_cloud_name(r"C:\Users\Test\Documents", "12345678-abcd"),
             "Documents-12345678"
         );
+    }
+
+    #[test]
+    fn cloud_connect_backs_up_existing_save_next_to_destination() {
+        let root = temp_test_dir("local-before-cloud");
+        let destination = root.join("game-save");
+        std::fs::create_dir_all(destination.join("nested")).unwrap();
+        std::fs::write(destination.join("profile.dat"), b"old-root-save").unwrap();
+        std::fs::write(
+            destination.join("nested").join("slot.dat"),
+            b"old-nested-save",
+        )
+        .unwrap();
+
+        let archive = backup_local_save_before_cloud(
+            &destination,
+            "Example Game",
+            crate::config::CompressionLevel::Fast,
+        )
+        .unwrap()
+        .expect("existing save files must create a ZIP backup");
+
+        let backup_dir = root.join("Backup Sync local saves");
+        assert_eq!(archive.parent(), Some(backup_dir.as_path()));
+        assert!(!archive.starts_with(&destination));
+
+        let restored = root.join("archive-check");
+        crate::archive::unzip_to(&archive, &restored).unwrap();
+        assert_eq!(
+            std::fs::read(restored.join("profile.dat")).unwrap(),
+            b"old-root-save"
+        );
+        assert_eq!(
+            std::fs::read(restored.join("nested").join("slot.dat")).unwrap(),
+            b"old-nested-save"
+        );
+        assert!(!restored.join("game-save").exists());
+
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

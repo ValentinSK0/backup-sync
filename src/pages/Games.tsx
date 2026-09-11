@@ -197,7 +197,7 @@ function ConnectGameModal({
     const ok = await run(
       "connectGame",
       () => connectGameBackup(provider, backup.cloudId, destination, trimmed),
-      `Hra „${trimmed}“ bola stiahnutá z cloudu a napojená.`,
+      `Hra „${trimmed}“ bola stiahnutá z cloudu a napojená. Pôvodné save súbory sú, ak existovali, v ZIPe vedľa zvoleného priečinka.`,
     );
     if (ok) onDone();
   }
@@ -244,8 +244,9 @@ function ConnectGameModal({
             </Button>
           </div>
           <p className="mt-1.5 text-xs text-zinc-500">
-            Do tohto priečinka sa rozbalí najnovší save. Existujúce súbory s
-            rovnakým názvom sa prepíšu.
+            Cloud save sa rozbalí priamo do tohto priečinka, bez ďalšieho
+            vnoreného priečinka. Ak tu už sú save súbory, najprv sa uložia do
+            ZIPu v „Backup Sync local saves“ vedľa zvoleného priečinka.
           </p>
         </div>
 

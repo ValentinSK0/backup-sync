@@ -4,13 +4,22 @@ use std::path::{Path, PathBuf};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
-/// Zabalí celý priečinok do jedného zip archívu v temp priečinku a vráti jeho cestu.
-pub fn zip_dir(src: &Path, level: CompressionLevel) -> Result<PathBuf, String> {
+/// Zabalí celý priečinok do jedného ZIP archívu na zvolenú cestu.
+/// Obsah priečinka uloží priamo do koreňa ZIPu, bez ďalšieho vnoreného priečinka.
+pub fn zip_dir_to(src: &Path, out_path: &Path, level: CompressionLevel) -> Result<(), String> {
     if !src.is_dir() {
         return Err(format!("Priečinok neexistuje: {}", src.display()));
     }
-    let out_path = std::env::temp_dir().join(format!("backup-sync-{}.zip", uuid::Uuid::new_v4()));
-    let file = File::create(&out_path).map_err(|e| e.to_string())?;
+    if out_path.exists() {
+        return Err(format!("ZIP záloha už existuje: {}", out_path.display()));
+    }
+    if out_path.starts_with(src) {
+        return Err("ZIP záloha nesmie byť uložená vo vnútri zálohovaného priečinka.".into());
+    }
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let file = File::create(out_path).map_err(|e| e.to_string())?;
     let mut zip = ZipWriter::new(file);
 
     let deflate_level = match level {
@@ -47,6 +56,13 @@ pub fn zip_dir(src: &Path, level: CompressionLevel) -> Result<PathBuf, String> {
         }
     }
     zip.finish().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Zabalí celý priečinok do jedného ZIP archívu v temp priečinku a vráti jeho cestu.
+pub fn zip_dir(src: &Path, level: CompressionLevel) -> Result<PathBuf, String> {
+    let out_path = std::env::temp_dir().join(format!("backup-sync-{}.zip", uuid::Uuid::new_v4()));
+    zip_dir_to(src, &out_path, level)?;
     Ok(out_path)
 }
 
@@ -104,6 +120,33 @@ mod tests {
             std::fs::read(destination.join("nested").join("save.dat")).unwrap(),
             b"save-data"
         );
+
+        let _ = std::fs::remove_file(archive);
+        let _ = std::fs::remove_dir_all(source);
+        let _ = std::fs::remove_dir_all(destination);
+    }
+
+    #[test]
+    fn zip_keeps_save_files_at_destination_root() {
+        let source = temp_dir("source-root");
+        let destination = temp_dir("destination-root");
+        let archive = temp_dir("archive-root").with_extension("zip");
+        std::fs::create_dir_all(source.join("nested")).unwrap();
+        std::fs::write(source.join("profile.dat"), b"root-save").unwrap();
+        std::fs::write(source.join("nested").join("slot.dat"), b"nested-save").unwrap();
+
+        zip_dir_to(&source, &archive, CompressionLevel::Fast).unwrap();
+        unzip_to(&archive, &destination).unwrap();
+
+        assert_eq!(
+            std::fs::read(destination.join("profile.dat")).unwrap(),
+            b"root-save"
+        );
+        assert_eq!(
+            std::fs::read(destination.join("nested").join("slot.dat")).unwrap(),
+            b"nested-save"
+        );
+        assert!(!destination.join("source-root").exists());
 
         let _ = std::fs::remove_file(archive);
         let _ = std::fs::remove_dir_all(source);
