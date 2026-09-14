@@ -4,6 +4,7 @@ import type {
   AppConfig,
   CloudFolderBackup,
   CloudGameBackup,
+  GameCloudStatus,
   Provider,
   Settings,
   VersionInfo,
@@ -57,6 +58,22 @@ export function removeGame(id: string): Promise<AppConfig> {
   return invoke<AppConfig>("remove_game", { id });
 }
 
+export function updateGame(
+  id: string,
+  name: string,
+  savePath: string,
+  backupPath: string,
+  provider: Provider,
+): Promise<AppConfig> {
+  return invoke<AppConfig>("update_game", {
+    id,
+    name,
+    savePath,
+    backupPath,
+    provider,
+  });
+}
+
 export function setGameAutoUpload(
   id: string,
   value: boolean | null,
@@ -96,6 +113,10 @@ export function uploadGameSave(id: string): Promise<AppConfig> {
 
 export function listGameVersions(id: string): Promise<VersionInfo[]> {
   return invoke<VersionInfo[]>("list_game_versions", { id });
+}
+
+export function listGameCloudStatuses(): Promise<GameCloudStatus[]> {
+  return invoke<GameCloudStatus[]>("list_game_cloud_statuses");
 }
 
 export function restoreGameVersion(

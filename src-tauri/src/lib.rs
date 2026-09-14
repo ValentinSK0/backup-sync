@@ -81,6 +81,12 @@ pub fn run() {
                 }
             }
             for g in cfg.games.iter_mut() {
+                if g.cloud_name.is_empty() {
+                    g.cloud_name = sync::game_cloud_name(&g.name);
+                }
+                if g.backup_path.is_empty() {
+                    g.backup_path = sync::default_game_backup_path(&g.save_path);
+                }
                 if g.sync_state == SyncState::Syncing {
                     g.sync_state = SyncState::Changed;
                 }
@@ -112,6 +118,7 @@ pub fn run() {
             commands::remove_watched_folder,
             commands::set_folder_auto_backup,
             commands::add_game,
+            commands::update_game,
             commands::remove_game,
             commands::set_game_auto_upload,
             commands::backup_folder_now,
@@ -120,6 +127,7 @@ pub fn run() {
             commands::restore_folder_from_cloud,
             commands::upload_game_save,
             commands::list_game_versions,
+            commands::list_game_cloud_statuses,
             commands::restore_game_version,
             commands::list_game_backups,
             commands::connect_game_backup,

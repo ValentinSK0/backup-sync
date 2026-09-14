@@ -19,12 +19,21 @@ export interface Game {
   id: string;
   name: string;
   savePath: string;
+  cloudName: string;
+  backupPath: string;
   provider: Provider;
   autoUpload: boolean | null; // null = dedí globálne nastavenie
   syncState: SyncState;
   lastChange: string | null;
   lastUpload: string | null;
+  lastCloudVersionId: string | null;
   lastError: string | null;
+}
+
+export interface GameCloudStatus {
+  id: string;
+  updateAvailable: boolean;
+  latestAt: string | null;
 }
 
 export interface ProviderStatus {

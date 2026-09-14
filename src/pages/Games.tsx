@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   addGame,
   connectGameBackup,
+  listGameCloudStatuses,
   listGameBackups,
   listGameVersions,
   openLocalFolder,
@@ -9,6 +10,7 @@ import {
   removeGame,
   restoreGameVersion,
   setGameAutoUpload,
+  updateGame,
   uploadGameSave,
 } from "../api";
 import { ConfirmDialog, Modal } from "../components/Modal";
@@ -23,6 +25,7 @@ import {
   LinkIcon,
   PlusIcon,
   SpinnerIcon,
+  SettingsIcon,
   TrashIcon,
   UploadIcon,
 } from "../components/icons";
@@ -37,7 +40,13 @@ import {
 import { useApp } from "../context";
 import { errMsg, formatBytes, formatDate, providerLabel } from "../format";
 import { useConfigAction } from "../hooks";
-import type { CloudGameBackup, Game, Provider, VersionInfo } from "../types";
+import type {
+  CloudGameBackup,
+  Game,
+  GameCloudStatus,
+  Provider,
+  VersionInfo,
+} from "../types";
 
 type AutoUploadOption = "inherit" | "on" | "off";
 
@@ -485,15 +494,189 @@ function AddGameModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+function EditGameModal({
+  game,
+  onClose,
+}: {
+  game: Game;
+  onClose: () => void;
+}) {
+  const { toast } = useApp();
+  const { busy, run } = useConfigAction();
+  const [name, setName] = useState(game.name);
+  const [savePath, setSavePath] = useState(game.savePath);
+  const [backupPath, setBackupPath] = useState(game.backupPath);
+  const [provider, setProvider] = useState<Provider>(game.provider);
+  const [picking, setPicking] = useState<"save" | "backup" | null>(null);
+
+  async function handlePick(target: "save" | "backup") {
+    setPicking(target);
+    try {
+      const path = await pickFolder();
+      if (!path) return;
+      if (target === "save") setSavePath(path);
+      else setBackupPath(path);
+    } finally {
+      setPicking(null);
+    }
+  }
+
+  async function handleSubmit() {
+    const trimmed = name.trim();
+    if (!trimmed || !savePath || !backupPath) {
+      toast("error", "Vyplňte názov hry, save cestu aj backup cestu.");
+      return;
+    }
+    const ok = await run(
+      `edit:${game.id}`,
+      () => updateGame(game.id, trimmed, savePath, backupPath, provider),
+      `Hra „${trimmed}“ upravená.`,
+    );
+    if (ok) onClose();
+  }
+
+  return (
+    <Modal title={`Upraviť hru: ${game.name}`} onClose={onClose}>
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void handleSubmit();
+        }}
+      >
+        <div>
+          <label className={labelCls} htmlFor={`edit-game-name-${game.id}`}>
+            Názov hry v aplikácii
+          </label>
+          <input
+            id={`edit-game-name-${game.id}`}
+            className={inputCls}
+            value={name}
+            onChange={(e) => setName(e.currentTarget.value)}
+            autoFocus
+          />
+        </div>
+
+        <div>
+          <label className={labelCls} htmlFor={`edit-game-save-${game.id}`}>
+            Cesta k save súborom
+          </label>
+          <div className="flex gap-2">
+            <input
+              id={`edit-game-save-${game.id}`}
+              className={inputCls}
+              value={savePath}
+              onChange={(e) => setSavePath(e.currentTarget.value)}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              loading={picking === "save"}
+              onClick={() => void handlePick("save")}
+            >
+              Vybrať
+            </Button>
+          </div>
+        </div>
+
+        <div>
+          <label className={labelCls} htmlFor={`edit-game-backup-${game.id}`}>
+            Cesta pre lokálne ZIP zálohy
+          </label>
+          <div className="flex gap-2">
+            <input
+              id={`edit-game-backup-${game.id}`}
+              className={inputCls}
+              value={backupPath}
+              onChange={(e) => setBackupPath(e.currentTarget.value)}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              loading={picking === "backup"}
+              onClick={() => void handlePick("backup")}
+            >
+              Vybrať
+            </Button>
+          </div>
+          <p className="mt-1.5 text-xs text-zinc-500">
+            Sem sa uloží ZIP pôvodného save-u pred stiahnutím alebo obnovením
+            verzie z cloudu.
+          </p>
+        </div>
+
+        <div>
+          <label className={labelCls} htmlFor={`edit-game-provider-${game.id}`}>
+            Cloud disk
+          </label>
+          <select
+            id={`edit-game-provider-${game.id}`}
+            className={inputCls}
+            value={provider}
+            onChange={(e) => setProvider(e.currentTarget.value as Provider)}
+          >
+            <option value="gdrive">Google Drive</option>
+            <option value="ulozto">Ulož.to Disk</option>
+            <option value="customCloud">Vlastný cloud</option>
+          </select>
+          <p className="mt-1.5 text-xs text-zinc-500">
+            Po zmene cloud disku môžeš obnoviť existujúcu verziu cez „Verzie“
+            alebo nahrať nový save na zvolený cloud.
+          </p>
+        </div>
+
+        <div className="mt-1 flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Zrušiť
+          </Button>
+          <Button variant="primary" type="submit" loading={busy === `edit:${game.id}`}>
+            Uložiť zmeny
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 export default function Games() {
   const { config, toast } = useApp();
   const { busy, run } = useConfigAction();
   const [toRemove, setToRemove] = useState<Game | null>(null);
+  const [editGame, setEditGame] = useState<Game | null>(null);
   const [versionsGame, setVersionsGame] = useState<Game | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [cloudProvider, setCloudProvider] = useState<Provider | null>(null);
+  const [cloudStatuses, setCloudStatuses] = useState<
+    Record<string, GameCloudStatus>
+  >({});
 
   const games = config.games;
+  const cloudStatusKey = games
+    .map(
+      (game) =>
+        `${game.id}:${game.provider}:${game.cloudName}:${game.lastUpload}:${game.lastCloudVersionId}`,
+    )
+    .join("|");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function refresh() {
+      try {
+        const statuses = await listGameCloudStatuses();
+        if (!cancelled) {
+          setCloudStatuses(Object.fromEntries(statuses.map((status) => [status.id, status])));
+        }
+      } catch {
+        // Nedostupný cloud nesmie zablokovať zobrazenie lokálnych hier.
+      }
+    }
+    void refresh();
+    const interval = window.setInterval(() => void refresh(), 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [cloudStatusKey]);
 
   async function handleOpenFolder(game: Game) {
     try {
@@ -543,6 +726,7 @@ export default function Games() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
           {games.map((g) => {
             const changed = g.syncState === "changed";
+            const cloudStatus = cloudStatuses[g.id];
             return (
               <Card
                 key={g.id}
@@ -578,6 +762,15 @@ export default function Games() {
                   </Button>
                   <Button
                     variant="ghost"
+                    className="!px-1.5 !py-1.5 text-zinc-500 hover:!bg-zinc-700/50 hover:!text-zinc-200"
+                    onClick={() => setEditGame(g)}
+                    aria-label={`Upraviť hru ${g.name}`}
+                    title="Upraviť hru"
+                  >
+                    <SettingsIcon className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
                     className="!px-1.5 !py-1.5 text-zinc-500 hover:!bg-red-500/10 hover:!text-red-400"
                     onClick={() => setToRemove(g)}
                     aria-label={`Odstrániť hru ${g.name}`}
@@ -588,7 +781,16 @@ export default function Games() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <StateBadge state={g.syncState} />
+                  {cloudStatus?.updateAvailable ? (
+                    <span
+                      className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-300"
+                      title={`Cloud má novšiu verziu z ${formatDate(cloudStatus.latestAt)}. Otvor Verzie a obnov ju.`}
+                    >
+                      Aktualizácia!
+                    </span>
+                  ) : (
+                    <StateBadge state={g.syncState} />
+                  )}
                   <span className="inline-flex items-center gap-1 text-xs text-zinc-500">
                     <CloudIcon className="h-3.5 w-3.5" />
                     {providerLabel(g.provider)}
@@ -681,6 +883,8 @@ export default function Games() {
       )}
 
       {addOpen && <AddGameModal onClose={() => setAddOpen(false)} />}
+
+      {editGame && <EditGameModal game={editGame} onClose={() => setEditGame(null)} />}
 
       {cloudProvider && (
         <CloudGamesModal

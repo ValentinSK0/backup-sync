@@ -40,6 +40,14 @@ pub struct CloudGameBackup {
     pub already_connected: bool,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameCloudStatus {
+    pub id: String,
+    pub update_available: bool,
+    pub latest_at: Option<String>,
+}
+
 struct SyncGuard {
     active: Arc<StdMutex<std::collections::HashSet<String>>>,
     key: String,
@@ -188,19 +196,24 @@ fn contains_local_save_files(root: &Path) -> Result<bool, String> {
 
 fn backup_local_save_before_cloud(
     destination: &Path,
+    configured_backup_path: &str,
     game_name: &str,
     level: crate::config::CompressionLevel,
 ) -> Result<Option<PathBuf>, String> {
     if !contains_local_save_files(destination)? {
         return Ok(None);
     }
-    let parent = destination.parent().ok_or_else(|| {
-        format!(
-            "Pôvodný save sa nedá zazálohovať: priečinok nemá nadradenú cestu: {}",
-            destination.display()
-        )
-    })?;
-    let backup_dir = parent.join("Backup Sync local saves");
+    let backup_dir = if configured_backup_path.trim().is_empty() {
+        let parent = destination.parent().ok_or_else(|| {
+            format!(
+                "Pôvodný save sa nedá zazálohovať: priečinok nemá nadradenú cestu: {}",
+                destination.display()
+            )
+        })?;
+        parent.join("Backup Sync local saves")
+    } else {
+        PathBuf::from(configured_backup_path)
+    };
     let stamp = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S-%3f");
     let archive = backup_dir.join(format!(
         "{}_local-before-cloud_{}-{}.zip",
@@ -253,10 +266,32 @@ fn games_backups_root() -> Vec<String> {
     vec!["BackupSync".into(), "games".into()]
 }
 
-fn game_remote_dir(name: &str) -> Vec<String> {
+pub fn game_cloud_name(name: &str) -> String {
+    sanitize(name)
+}
+
+pub fn default_game_backup_path(save_path: &str) -> String {
+    let save = Path::new(save_path);
+    save.parent()
+        .unwrap_or(save)
+        .join("Backup Sync local saves")
+        .to_string_lossy()
+        .to_string()
+}
+
+fn game_remote_dir(cloud_name: &str) -> Vec<String> {
     let mut dir = games_backups_root();
-    dir.push(sanitize(name));
+    dir.push(cloud_name.to_string());
     dir
+}
+
+fn game_remote_dir_for(game: &crate::config::Game) -> Vec<String> {
+    let cloud_name = if game.cloud_name.trim().is_empty() {
+        game_cloud_name(&game.name)
+    } else {
+        game.cloud_name.clone()
+    };
+    game_remote_dir(&cloud_name)
 }
 
 /// Z názvu cloud priečinka spraví čitateľný názov hry (pomlčky/podčiarkovníky → medzery).
@@ -866,18 +901,19 @@ pub async fn restore_folder_from_cloud(app: &AppHandle, id: &str) -> Result<(), 
 fn set_game_result(
     cfg: &mut AppConfig,
     id: &str,
-    result: &Result<(), String>,
+    result: &Result<String, String>,
     changed_during_sync: bool,
 ) {
     if let Some(g) = cfg.games.iter_mut().find(|g| g.id == id) {
         match result {
-            Ok(()) => {
+            Ok(version_id) => {
                 g.sync_state = if changed_during_sync {
                     SyncState::Changed
                 } else {
                     SyncState::Synced
                 };
                 g.last_upload = Some(now_iso());
+                g.last_cloud_version_id = Some(version_id.clone());
                 g.last_error = None;
             }
             Err(e) => {
@@ -893,6 +929,7 @@ fn set_game_restore_result(
     id: &str,
     result: &Result<(), String>,
     changed_during_sync: bool,
+    version_id: &str,
 ) {
     if let Some(game) = cfg.games.iter_mut().find(|game| game.id == id) {
         match result {
@@ -903,6 +940,7 @@ fn set_game_restore_result(
                     SyncState::Synced
                 };
                 game.last_error = None;
+                game.last_cloud_version_id = Some(version_id.to_string());
             }
             Err(error) => {
                 game.sync_state = SyncState::Error;
@@ -938,17 +976,17 @@ pub async fn upload_game(app: &AppHandle, id: &str) -> Result<(), String> {
     })
     .await?;
     match &result {
-        Ok(()) => emit_progress(app, "game", id, "done", Some("Save nahraný".into())),
+        Ok(_) => emit_progress(app, "game", id, "done", Some("Save nahraný".into())),
         Err(e) => emit_progress(app, "game", id, "error", Some(e.clone())),
     }
-    result
+    result.map(|_| ())
 }
 
 async fn upload_game_inner(
     app: &AppHandle,
     game: &crate::config::Game,
     cfg: &AppConfig,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let save_path = PathBuf::from(&game.save_path);
     let level = cfg.settings.compression_level;
     let zip_path = {
@@ -969,10 +1007,10 @@ async fn upload_game_inner(
         Some(format!("Nahrávam {name}…")),
     );
     let upload = storage
-        .upload_file(&game_remote_dir(&game.name), &name, &zip_path)
+        .upload_file(&game_remote_dir_for(game), &name, &zip_path)
         .await;
     let _ = std::fs::remove_file(&zip_path);
-    upload.map(|_| ())
+    upload
 }
 
 /// Zoznam verzií save-ov hry na cloude (najnovšie prvé).
@@ -985,10 +1023,54 @@ pub async fn list_game_versions(app: &AppHandle, id: &str) -> Result<Vec<RemoteF
         .cloned()
         .ok_or_else(|| "Hra sa nenašla.".to_string())?;
     let storage = make_provider(game.provider, &cfg)?;
-    let mut files = storage.list_files(&game_remote_dir(&game.name)).await?;
+    let mut files = storage.list_files(&game_remote_dir_for(&game)).await?;
     files.retain(|f| f.name.to_lowercase().ends_with(".zip"));
     files.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     Ok(files)
+}
+
+fn remote_game_version_is_newer(game: &crate::config::Game, latest: &RemoteFile) -> bool {
+    if game.last_cloud_version_id.as_deref() == Some(latest.id.as_str()) {
+        return false;
+    }
+    match (&latest.created_at, &game.last_upload) {
+        (Some(remote), Some(local)) => {
+            let remote = chrono::DateTime::parse_from_rfc3339(remote).ok();
+            let local = chrono::DateTime::parse_from_rfc3339(local).ok();
+            remote
+                .zip(local)
+                .is_none_or(|(remote, local)| remote > local + chrono::Duration::seconds(5))
+        }
+        _ => true,
+    }
+}
+
+/// Skontroluje, či cloud obsahuje novšiu verziu než posledná známa lokálna verzia hry.
+/// Nedostupný cloud neskryje kartu ani jej aktuálny lokálny stav.
+pub async fn list_game_cloud_statuses(app: &AppHandle) -> Result<Vec<GameCloudStatus>, String> {
+    let cfg = snapshot(app).await;
+    let mut statuses = Vec::with_capacity(cfg.games.len());
+    for game in &cfg.games {
+        let latest = match make_provider(game.provider, &cfg) {
+            Ok(storage) => match storage.list_files(&game_remote_dir_for(game)).await {
+                Ok(files) => files
+                    .into_iter()
+                    .filter(|file| file.name.to_lowercase().ends_with(".zip"))
+                    .max_by(|a, b| a.created_at.cmp(&b.created_at)),
+                Err(_) => None,
+            },
+            Err(_) => None,
+        };
+        let update_available = latest
+            .as_ref()
+            .is_some_and(|latest| remote_game_version_is_newer(game, latest));
+        statuses.push(GameCloudStatus {
+            id: game.id.clone(),
+            update_available,
+            latest_at: latest.and_then(|file| file.created_at),
+        });
+    }
+    Ok(statuses)
 }
 
 /// Stiahne zvolenú verziu a rozbalí ju do save priečinka.
@@ -1015,6 +1097,20 @@ pub async fn restore_game_version(
         std::env::temp_dir().join(format!("backup-sync-restore-{}.zip", uuid::Uuid::new_v4()));
     let staging =
         std::env::temp_dir().join(format!("backup-sync-game-restore-{}", uuid::Uuid::new_v4()));
+    let backup_destination = PathBuf::from(&game.save_path);
+    let backup_path = game.backup_path.clone();
+    let backup_game_name = game.name.clone();
+    let backup_level = cfg.settings.compression_level;
+    tokio::task::spawn_blocking(move || {
+        backup_local_save_before_cloud(
+            &backup_destination,
+            &backup_path,
+            &backup_game_name,
+            backup_level,
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())??;
     emit_progress(
         app,
         "game",
@@ -1025,7 +1121,7 @@ pub async fn restore_game_version(
     let result = async {
         let storage = make_provider(game.provider, &cfg)?;
         let selected = storage
-            .list_files(&game_remote_dir(&game.name))
+            .list_files(&game_remote_dir_for(&game))
             .await?
             .into_iter()
             .any(|file| file.id == version_id && file.name.to_lowercase().ends_with(".zip"));
@@ -1055,7 +1151,7 @@ pub async fn restore_game_version(
     let _ = std::fs::remove_dir_all(&staging);
     with_config(app, |config| {
         let changed = take_pending_change(app, "game", id);
-        set_game_restore_result(config, id, &result, changed);
+        set_game_restore_result(config, id, &result, changed, version_id);
     })
     .await?;
     match &result {
@@ -1088,10 +1184,14 @@ pub async fn list_game_backups(
         let size_bytes = versions
             .iter()
             .fold(0u64, |total, f| total.saturating_add(f.size_bytes));
-        let already_connected = cfg
-            .games
-            .iter()
-            .any(|g| g.provider == provider && sanitize(&g.name) == folder.name);
+        let already_connected = cfg.games.iter().any(|g| {
+            g.provider == provider
+                && if g.cloud_name.trim().is_empty() {
+                    game_cloud_name(&g.name) == folder.name
+                } else {
+                    g.cloud_name == folder.name
+                }
+        });
         backups.push(CloudGameBackup {
             cloud_id: folder.id,
             name: prettify_cloud_name(&folder.name),
@@ -1162,7 +1262,7 @@ pub async fn connect_game_backup(
     let backup_game_name = name.clone();
     let backup_level = cfg.settings.compression_level;
     let _local_backup = tokio::task::spawn_blocking(move || {
-        backup_local_save_before_cloud(&backup_destination, &backup_game_name, backup_level)
+        backup_local_save_before_cloud(&backup_destination, "", &backup_game_name, backup_level)
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -1198,11 +1298,19 @@ pub async fn connect_game_backup(
             id: uuid::Uuid::new_v4().to_string(),
             name,
             save_path: destination.to_string(),
+            cloud_name: folder.name,
+            backup_path: destination_path
+                .parent()
+                .unwrap_or(destination_path.as_path())
+                .join("Backup Sync local saves")
+                .to_string_lossy()
+                .to_string(),
             provider,
             auto_upload: Some(false),
             sync_state: SyncState::Synced,
             last_change: None,
-            last_upload: Some(now_iso()),
+            last_upload: latest.modified_at,
+            last_cloud_version_id: Some(latest.id),
             last_error: None,
         });
     })
@@ -1239,6 +1347,7 @@ mod tests {
 
         let archive = backup_local_save_before_cloud(
             &destination,
+            "",
             "Example Game",
             crate::config::CompressionLevel::Fast,
         )
@@ -1260,6 +1369,30 @@ mod tests {
             b"old-nested-save"
         );
         assert!(!restored.join("game-save").exists());
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn cloud_restore_uses_configured_game_backup_directory() {
+        let root = temp_test_dir("configured-game-backup");
+        let destination = root.join("game-save");
+        let backup_dir = root.join("chosen-backups");
+        std::fs::create_dir_all(&destination).unwrap();
+        std::fs::write(destination.join("profile.dat"), b"old-save").unwrap();
+        let backup_path = backup_dir.to_string_lossy().to_string();
+
+        let archive = backup_local_save_before_cloud(
+            &destination,
+            &backup_path,
+            "Example Game",
+            crate::config::CompressionLevel::Fast,
+        )
+        .unwrap()
+        .expect("existing save files must create a ZIP backup");
+
+        assert_eq!(archive.parent(), Some(backup_dir.as_path()));
+        assert!(!archive.starts_with(&destination));
 
         let _ = std::fs::remove_dir_all(root);
     }

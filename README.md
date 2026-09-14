@@ -20,6 +20,8 @@ Požiadavky: 64-bit Windows 10 alebo Windows 11 a internetové pripojenie pre cl
 - Automaticky sledovať zmeny alebo zálohovať ručne.
 - Zabaliť save priečinok hry do ZIP archívu a uchovávať viac verzií.
 - Obnoviť vybranú verziu herného save.
+- Upraviť názov hry, save cestu, lokálnu backup cestu aj cloud priamo na karte hry.
+- Zobraziť stav **Aktualizácia!**, keď cloud obsahuje novšiu verziu save-u.
 - Zálohovať na výber medzi Google Drive, Ulož.to Diskom a vlastným cloudom — cloud sa volí pri každej hre a priečinku.
 - Prehliadať herné aj priečinkové zálohy na zvolenom cloude a stiahnuť ktorúkoľvek z nich do vybraného priečinka na novom PC.
 - Otvoriť priečinok so save súbormi priamo z karty hry.
@@ -90,11 +92,11 @@ Aplikácia používa PKCE, kontrolu OAuth `state` a iba scope `drive.file`. Clie
 
 Pre verejný release musí byť OAuth consent screen v Google Cloud nastavený na **In production**. V režime **Testing** fungujú iba testovací používatelia a refresh token môže po siedmich dňoch vypršať.
 
-## Dôležité limity v0.4.1
+## Dôležité limity v0.4.2
 
-- Aplikácia zatiaľ automaticky nerozhoduje, či je novšia lokálna alebo cloud verzia, ani nerieši konflikt zmien z dvoch PC. Smer operácie vyberá používateľ tlačidlom **Zálohovať** alebo **Stiahnuť**.
+- Stav **Aktualizácia!** porovnáva najnovšiu cloud verziu s poslednou známou verziou hry. Konflikt zmien z dvoch PC aplikácia automaticky nerieši; smer operácie vyberá používateľ.
 - Priečinková záloha prepíše súbor s rovnakou cestou, ale nemaže súbory, ktoré zostali iba na cloude. Obnova prepíše rovnaké lokálne súbory a ostatné lokálne súbory ponechá.
-- Hry sa na cloude zatiaľ párujú podľa upraveného názvu hry. Na druhom PC zadaj rovnaký názov; premenovanie vytvorí nový cloud priečinok a rovnaké názvy môžu kolidovať.
+- Hry sa na cloude párujú stabilným cloud názvom. Premenovanie názvu v aplikácii preto nemení existujúci cloud priečinok.
 - Vlastný cloud je pokročilá funkcia a vyžaduje kompatibilný server podľa [API kontraktu](docs/custom-cloud-api.md).
 
 ## Vývoj a build

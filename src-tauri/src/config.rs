@@ -62,6 +62,12 @@ pub struct Game {
     pub id: String,
     pub name: String,
     pub save_path: String,
+    /// Stabilný názov priečinka hry na cloude. Názov v aplikácii môže používateľ meniť.
+    #[serde(default)]
+    pub cloud_name: String,
+    /// Miesto pre lokálne ZIP zálohy pred stiahnutím alebo obnovením save-u z cloudu.
+    #[serde(default)]
+    pub backup_path: String,
     pub provider: Provider,
     #[serde(default)]
     pub auto_upload: Option<bool>,
@@ -71,6 +77,9 @@ pub struct Game {
     pub last_change: Option<String>,
     #[serde(default)]
     pub last_upload: Option<String>,
+    /// ID cloudovej verzie, z ktorej lokálny save naposledy pochádza.
+    #[serde(default)]
+    pub last_cloud_version_id: Option<String>,
     #[serde(default)]
     pub last_error: Option<String>,
 }

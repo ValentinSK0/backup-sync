@@ -100,6 +100,16 @@ fn canonical_directory(path: &str) -> CmdResult<PathBuf> {
     std::fs::canonicalize(path).map_err(|e| format!("Priečinok sa nedá otvoriť: {e}"))
 }
 
+fn ensure_directory(path: &str) -> CmdResult<PathBuf> {
+    let path = Path::new(path.trim());
+    if path.as_os_str().is_empty() {
+        return Err("Vyber priečinok pre lokálne ZIP zálohy.".into());
+    }
+    std::fs::create_dir_all(path)
+        .map_err(|e| format!("Priečinok pre lokálne ZIP zálohy sa nedá vytvoriť: {e}"))?;
+    canonical_directory(path.to_string_lossy().as_ref())
+}
+
 #[tauri::command]
 pub async fn add_watched_folder(
     app: AppHandle,
@@ -179,18 +189,85 @@ pub async fn add_game(
     }) {
         return Err("Tento save priečinok už je pridaný k hre.".into());
     }
+    let cloud_name = sync::game_cloud_name(name.trim());
+    let backup_path = sync::default_game_backup_path(&save_path);
     let cfg = sync::with_config(&app, |c| {
         c.games.push(crate::config::Game {
             id: uuid::Uuid::new_v4().to_string(),
             name: name.trim().to_string(),
             save_path,
+            cloud_name,
+            backup_path,
             provider,
             auto_upload: None,
             sync_state: SyncState::Changed,
             last_change: Some(now_iso()),
             last_upload: None,
+            last_cloud_version_id: None,
             last_error: None,
         });
+    })
+    .await?;
+    watcher::rebuild(&app, &cfg);
+    Ok(cfg)
+}
+
+#[tauri::command]
+pub async fn update_game(
+    app: AppHandle,
+    id: String,
+    name: String,
+    save_path: String,
+    backup_path: String,
+    provider: Provider,
+) -> CmdResult<AppConfig> {
+    if sync::is_sync_active(&app, "game", &id) {
+        return Err("Počkaj, kým sa synchronizácia hry dokončí.".into());
+    }
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Zadaj názov hry.".into());
+    }
+    let save_canonical = canonical_directory(&save_path)?;
+    let backup_canonical = ensure_directory(&backup_path)?;
+    if backup_canonical.starts_with(&save_canonical) {
+        return Err("ZIP zálohy nemôžu byť uložené vo vnútri save priečinka.".into());
+    }
+    let current = sync::snapshot(&app).await;
+    let existing = current
+        .games
+        .iter()
+        .find(|game| game.id == id)
+        .ok_or_else(|| "Hra sa nenašla.".to_string())?;
+    if current.games.iter().any(|game| {
+        game.id != id
+            && canonical_directory(&game.save_path).is_ok_and(|path| path == save_canonical)
+    }) {
+        return Err("Tento save priečinok už je pridaný k inej hre.".into());
+    }
+    let save_changed = canonical_directory(&existing.save_path)
+        .map(|path| path != save_canonical)
+        .unwrap_or(true);
+    let provider_changed = existing.provider != provider;
+    let backup_path = backup_canonical.to_string_lossy().to_string();
+    let name = name.to_string();
+    let cfg = sync::with_config(&app, |config| {
+        if let Some(game) = config.games.iter_mut().find(|game| game.id == id) {
+            if game.cloud_name.trim().is_empty() {
+                game.cloud_name = sync::game_cloud_name(&game.name);
+            }
+            game.name = name;
+            game.save_path = save_path;
+            game.backup_path = backup_path;
+            if save_changed || provider_changed {
+                game.provider = provider;
+                game.sync_state = SyncState::Changed;
+                game.last_change = Some(now_iso());
+                game.last_upload = None;
+                game.last_cloud_version_id = None;
+                game.last_error = None;
+            }
+        }
     })
     .await?;
     watcher::rebuild(&app, &cfg);
@@ -265,6 +342,11 @@ pub async fn list_game_versions(app: AppHandle, id: String) -> CmdResult<Vec<Rem
 }
 
 #[tauri::command]
+pub async fn list_game_cloud_statuses(app: AppHandle) -> CmdResult<Vec<sync::GameCloudStatus>> {
+    sync::list_game_cloud_statuses(&app).await
+}
+
+#[tauri::command]
 pub async fn restore_game_version(app: AppHandle, id: String, version_id: String) -> CmdResult<()> {
     sync::restore_game_version(&app, &id, &version_id).await
 }
@@ -274,14 +356,13 @@ pub async fn restore_game_version(app: AppHandle, id: String, version_id: String
 pub async fn open_local_folder(app: AppHandle, path: String) -> CmdResult<()> {
     let target = canonical_directory(&path)?;
     let cfg = sync::snapshot(&app).await;
-    let known = cfg
-        .games
+    let known = cfg.games.iter().any(|game| {
+        canonical_directory(&game.save_path).is_ok_and(|dir| dir == target)
+            || canonical_directory(&game.backup_path).is_ok_and(|dir| dir == target)
+    }) || cfg
+        .watched_folders
         .iter()
-        .any(|game| canonical_directory(&game.save_path).is_ok_and(|dir| dir == target))
-        || cfg
-            .watched_folders
-            .iter()
-            .any(|folder| canonical_directory(&folder.path).is_ok_and(|dir| dir == target));
+        .any(|folder| canonical_directory(&folder.path).is_ok_and(|dir| dir == target));
     if !known {
         return Err("Tento priečinok aplikácia nesleduje.".into());
     }
