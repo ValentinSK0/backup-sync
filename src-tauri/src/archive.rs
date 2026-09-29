@@ -1,6 +1,6 @@
 use crate::config::CompressionLevel;
 use std::fs::File;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
@@ -59,13 +59,6 @@ pub fn zip_dir_to(src: &Path, out_path: &Path, level: CompressionLevel) -> Resul
     Ok(())
 }
 
-/// Zabalí celý priečinok do jedného ZIP archívu v temp priečinku a vráti jeho cestu.
-pub fn zip_dir(src: &Path, level: CompressionLevel) -> Result<PathBuf, String> {
-    let out_path = std::env::temp_dir().join(format!("backup-sync-{}.zip", uuid::Uuid::new_v4()));
-    zip_dir_to(src, &out_path, level)?;
-    Ok(out_path)
-}
-
 /// Rozbalí zip archív do cieľového priečinka (súbory prepíše, nič nemaže).
 pub fn unzip_to(archive: &Path, dest: &Path) -> Result<(), String> {
     let file = File::open(archive).map_err(|e| e.to_string())?;
@@ -98,6 +91,7 @@ pub fn unzip_to(archive: &Path, dest: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     fn temp_dir(label: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
@@ -113,7 +107,8 @@ mod tests {
         std::fs::create_dir_all(source.join("nested")).unwrap();
         std::fs::write(source.join("nested").join("save.dat"), b"save-data").unwrap();
 
-        let archive = zip_dir(&source, CompressionLevel::Fast).unwrap();
+        let archive = source.with_extension("zip");
+        zip_dir_to(&source, &archive, CompressionLevel::Fast).unwrap();
         unzip_to(&archive, &destination).unwrap();
 
         assert_eq!(

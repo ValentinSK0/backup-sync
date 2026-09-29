@@ -28,6 +28,15 @@ export interface Game {
   lastUpload: string | null;
   lastCloudVersionId: string | null;
   lastError: string | null;
+  local: {
+    observedHash: string | null;
+    backupHash: string | null;
+    uploadedHash: string | null;
+    lastBackup: string | null;
+    backupFile: string | null;
+    lastCheck: string | null;
+    watchError: string | null;
+  };
 }
 
 export interface GameCloudStatus {

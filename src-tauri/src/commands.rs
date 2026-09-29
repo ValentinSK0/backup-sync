@@ -177,12 +177,17 @@ pub async fn add_game(
     app: AppHandle,
     name: String,
     save_path: String,
+    backup_path: String,
     provider: Provider,
 ) -> CmdResult<AppConfig> {
     if name.trim().is_empty() {
         return Err("Zadaj názov hry.".into());
     }
     let canonical = canonical_directory(&save_path)?;
+    let backup_canonical = ensure_directory(&backup_path)?;
+    if backup_canonical.starts_with(&canonical) {
+        return Err("ZIP zálohy nemôžu byť uložené vo vnútri save priečinka.".into());
+    }
     let current = sync::snapshot(&app).await;
     if current.games.iter().any(|game| {
         canonical_directory(&game.save_path).is_ok_and(|existing| existing == canonical)
@@ -190,7 +195,7 @@ pub async fn add_game(
         return Err("Tento save priečinok už je pridaný k hre.".into());
     }
     let cloud_name = sync::game_cloud_name(name.trim());
-    let backup_path = sync::default_game_backup_path(&save_path);
+    let backup_path = backup_canonical.to_string_lossy().to_string();
     let cfg = sync::with_config(&app, |c| {
         c.games.push(crate::config::Game {
             id: uuid::Uuid::new_v4().to_string(),
@@ -205,6 +210,7 @@ pub async fn add_game(
             last_upload: None,
             last_cloud_version_id: None,
             last_error: None,
+            local: Default::default(),
         });
     })
     .await?;
@@ -266,6 +272,10 @@ pub async fn update_game(
                 game.last_upload = None;
                 game.last_cloud_version_id = None;
                 game.last_error = None;
+                game.local.uploaded_hash = None;
+                if save_changed {
+                    game.local = Default::default();
+                }
             }
         }
     })
@@ -337,6 +347,12 @@ pub async fn upload_game_save(app: AppHandle, id: String) -> CmdResult<AppConfig
 }
 
 #[tauri::command]
+pub async fn backup_game_local(app: AppHandle, id: String) -> CmdResult<AppConfig> {
+    sync::backup_game_local(&app, &id).await?;
+    Ok(sync::snapshot(&app).await)
+}
+
+#[tauri::command]
 pub async fn list_game_versions(app: AppHandle, id: String) -> CmdResult<Vec<RemoteFile>> {
     sync::list_game_versions(&app, &id).await
 }
@@ -387,8 +403,22 @@ pub async fn connect_game_backup(
     cloud_id: String,
     path: String,
     name: String,
+    backup_path: String,
 ) -> CmdResult<AppConfig> {
-    let cfg = sync::connect_game_backup(&app, provider, &cloud_id, &path, &name).await?;
+    let destination = canonical_directory(&path)?;
+    let backups = ensure_directory(&backup_path)?;
+    if backups.starts_with(destination) {
+        return Err("ZIP zálohy nemôžu byť uložené vo vnútri save priečinka.".into());
+    }
+    let cfg = sync::connect_game_backup(
+        &app,
+        provider,
+        &cloud_id,
+        &path,
+        &name,
+        &backups.to_string_lossy(),
+    )
+    .await?;
     watcher::rebuild(&app, &cfg);
     Ok(cfg)
 }

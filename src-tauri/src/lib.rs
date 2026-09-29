@@ -1,6 +1,7 @@
 mod archive;
 mod commands;
 mod config;
+mod game_save;
 mod storage;
 mod sync;
 mod tray;
@@ -126,6 +127,7 @@ pub fn run() {
             commands::connect_folder_backup,
             commands::restore_folder_from_cloud,
             commands::upload_game_save,
+            commands::backup_game_local,
             commands::list_game_versions,
             commands::list_game_cloud_statuses,
             commands::restore_game_version,

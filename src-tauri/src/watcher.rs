@@ -1,8 +1,8 @@
-use crate::config::{now_iso, AppConfig, SyncState};
+use crate::config::{AppConfig, SyncState};
 use crate::sync;
 use crate::AppState;
 use notify::{RecursiveMode, Watcher};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
@@ -59,15 +59,9 @@ pub fn rebuild(app: &AppHandle, cfg: &AppConfig) {
 
     std::thread::spawn(move || {
         let (tx, rx) = mpsc::channel::<notify::Result<notify::Event>>();
-        let mut watcher = match notify::recommended_watcher(tx) {
-            Ok(w) => w,
-            Err(_) => return,
-        };
-        for root in &roots {
-            if root.path.is_dir() {
-                let _ = watcher.watch(&root.path, RecursiveMode::Recursive);
-            }
-        }
+        let mut watcher = notify::recommended_watcher(tx.clone()).ok();
+        let mut watched = HashSet::new();
+        let mut last_scan = Instant::now() - Duration::from_secs(30);
 
         let mut pending: HashMap<Target, Instant> = HashMap::new();
         loop {
@@ -75,10 +69,7 @@ pub fn rebuild(app: &AppHandle, cfg: &AppConfig) {
                 return; // watcher sa dropne, sledovanie končí
             }
             match rx.recv_timeout(Duration::from_millis(400)) {
-                Ok(Ok(event)) => {
-                    if !matters(&event.kind) {
-                        continue;
-                    }
+                Ok(Ok(event)) if matters(&event.kind) => {
                     let now = Instant::now();
                     for path in &event.paths {
                         if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
@@ -97,9 +88,54 @@ pub fn rebuild(app: &AppHandle, cfg: &AppConfig) {
                         }
                     }
                 }
-                Ok(Err(_)) => {}
+                Ok(Ok(_)) => {}
+                Ok(Err(error)) => {
+                    watched.clear();
+                    for root in &roots {
+                        report_watch_error(&app, &root.target, Some(error.to_string()));
+                    }
+                }
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
-                Err(mpsc::RecvTimeoutError::Disconnected) => return,
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    // Continue content checks even when the native watcher cannot start.
+                    std::thread::sleep(Duration::from_millis(400));
+                }
+            }
+
+            if last_scan.elapsed() >= Duration::from_secs(30) {
+                last_scan = Instant::now();
+                if watcher.is_none() {
+                    watcher = notify::recommended_watcher(tx.clone()).ok();
+                }
+                for root in &roots {
+                    if !root.path.is_dir() {
+                        watched.remove(&root.path);
+                    }
+                    if !watched.contains(&root.path) {
+                        let result = match watcher.as_mut() {
+                            Some(watcher) => watcher
+                                .watch(&root.path, RecursiveMode::Recursive)
+                                .map_err(|e| e.to_string()),
+                            None => Err("Systémové sledovanie nie je dostupné.".into()),
+                        };
+                        match result {
+                            Ok(()) => {
+                                watched.insert(root.path.clone());
+                                report_watch_error(&app, &root.target, None);
+                            }
+                            Err(error) => report_watch_error(&app, &root.target, Some(error)),
+                        }
+                    }
+                    if let Target::Game(id) = &root.target {
+                        if !is_suppressed(&suppress, &root.path) {
+                            let app = app.clone();
+                            let id = id.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let _ = sync::check_game_save(&app, &id).await;
+                            });
+                        }
+                    }
+                }
             }
 
             // debounce tik: spracuj ciele, ktoré sa už `debounce` neozvali
@@ -115,6 +151,45 @@ pub fn rebuild(app: &AppHandle, cfg: &AppConfig) {
                 tauri::async_runtime::spawn(async move {
                     handle_change(app, target).await;
                 });
+            }
+        }
+    });
+}
+
+fn report_watch_error(app: &AppHandle, target: &Target, error: Option<String>) {
+    let app = app.clone();
+    let target = target.clone();
+    tauri::async_runtime::spawn(async move {
+        match target {
+            Target::Game(id) => {
+                let message = error.map(|e| {
+                    format!("Sledovanie zmien zlyhalo; obsah kontrolujem každých 30 sekúnd. {e}")
+                });
+                let cfg = sync::snapshot(&app).await;
+                if cfg
+                    .games
+                    .iter()
+                    .find(|g| g.id == id)
+                    .is_some_and(|g| g.local.watch_error != message)
+                {
+                    let _ = sync::with_config(&app, |c| {
+                        if let Some(g) = c.games.iter_mut().find(|g| g.id == id) {
+                            g.local.watch_error = message;
+                        }
+                    })
+                    .await;
+                }
+            }
+            Target::Folder(id) => {
+                if let Some(error) = error {
+                    sync::emit_progress(
+                        &app,
+                        "folder",
+                        &id,
+                        "error",
+                        Some(format!("Sledovanie priečinka zlyhalo: {error}")),
+                    );
+                }
             }
         }
     });
@@ -186,50 +261,7 @@ async fn handle_change(app: AppHandle, target: Target) {
             }
         }
         Target::Game(id) => {
-            let mut retry_after_sync = false;
-            let cfg = match sync::with_config(&app, |c| {
-                if let Some(g) = c.games.iter_mut().find(|g| g.id == id) {
-                    g.last_change = Some(now_iso());
-                    if g.sync_state == SyncState::Syncing {
-                        retry_after_sync = sync::record_pending_change(&app, "game", &id);
-                    } else {
-                        g.sync_state = SyncState::Changed;
-                    }
-                }
-            })
-            .await
-            {
-                Ok(config) => config,
-                Err(error) => {
-                    sync::emit_progress(&app, "game", &id, "error", Some(error));
-                    return;
-                }
-            };
-            let auto = cfg
-                .games
-                .iter()
-                .find(|g| g.id == id)
-                .map(|g| g.auto_upload.unwrap_or(cfg.settings.auto_upload_saves))
-                .unwrap_or(false);
-            if auto {
-                if retry_after_sync {
-                    wait_until_idle(&app, "game", &id).await;
-                    let current = sync::snapshot(&app).await;
-                    let still_auto =
-                        current
-                            .games
-                            .iter()
-                            .find(|game| game.id == id)
-                            .is_some_and(|game| {
-                                game.auto_upload
-                                    .unwrap_or(current.settings.auto_upload_saves)
-                            });
-                    if !still_auto {
-                        return;
-                    }
-                }
-                let _ = sync::upload_game(&app, &id).await;
-            }
+            let _ = sync::check_game_save(&app, &id).await;
         }
     }
 }
@@ -237,5 +269,49 @@ async fn handle_change(app: AppHandle, target: Target) {
 async fn wait_until_idle(app: &AppHandle, kind: &str, id: &str) {
     while sync::is_sync_active(app, kind, id) {
         tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_watcher_receives_changes_inside_a_farm() {
+        let root = std::env::temp_dir().join(format!("backup-sync-watch-{}", uuid::Uuid::new_v4()));
+        let farm = root.join("Saves/Farm2/nested");
+        std::fs::create_dir_all(&farm).unwrap();
+        let file = farm.join("save");
+        std::fs::write(&file, b"previous").unwrap();
+        let (tx, rx) = mpsc::channel();
+        let mut watcher = notify::recommended_watcher(tx).unwrap();
+        watcher
+            .watch(&root.join("Saves"), RecursiveMode::Recursive)
+            .unwrap();
+        std::fs::write(&file, b"new-save").unwrap();
+        let until = Instant::now() + Duration::from_secs(5);
+        let mut detected = false;
+        while let Some(remaining) = until.checked_duration_since(Instant::now()) {
+            match rx.recv_timeout(remaining) {
+                Ok(Ok(event)) if matters(&event.kind) => {
+                    if event
+                        .paths
+                        .iter()
+                        .any(|path| sync::comparable_path(path) == sync::comparable_path(&file))
+                    {
+                        detected = true;
+                        break;
+                    }
+                }
+                Ok(_) => {}
+                Err(_) => break,
+            }
+        }
+        drop(watcher);
+        std::fs::remove_dir_all(&root).unwrap();
+        assert!(
+            detected,
+            "recursive watcher must deliver a nested save change"
+        );
     }
 }

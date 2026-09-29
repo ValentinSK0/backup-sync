@@ -50,8 +50,9 @@ export function addGame(
   name: string,
   savePath: string,
   provider: Provider,
+  backupPath: string,
 ): Promise<AppConfig> {
-  return invoke<AppConfig>("add_game", { name, savePath, provider });
+  return invoke<AppConfig>("add_game", { name, savePath, provider, backupPath });
 }
 
 export function removeGame(id: string): Promise<AppConfig> {
@@ -111,6 +112,10 @@ export function uploadGameSave(id: string): Promise<AppConfig> {
   return invoke<AppConfig>("upload_game_save", { id });
 }
 
+export function backupGameLocal(id: string): Promise<AppConfig> {
+  return invoke<AppConfig>("backup_game_local", { id });
+}
+
 export function listGameVersions(id: string): Promise<VersionInfo[]> {
   return invoke<VersionInfo[]>("list_game_versions", { id });
 }
@@ -144,12 +149,14 @@ export function connectGameBackup(
   cloudId: string,
   path: string,
   name: string,
+  backupPath: string,
 ): Promise<AppConfig> {
   return invoke<AppConfig>("connect_game_backup", {
     provider,
     cloudId,
     path,
     name,
+    backupPath,
   });
 }
 

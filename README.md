@@ -19,6 +19,9 @@ Požiadavky: 64-bit Windows 10 alebo Windows 11 a internetové pripojenie pre cl
 - Inkrementálne zálohovať zvolené priečinky — nahrávajú sa iba zmenené súbory.
 - Automaticky sledovať zmeny alebo zálohovať ručne.
 - Zabaliť save priečinok hry do ZIP archívu a uchovávať viac verzií.
+- Kontrolovať obsah všetkých podpriečinkov save-u pri spustení, po zmene a každých 30 sekúnd.
+- Automaticky vytvárať overené lokálne ZIP zálohy a ten istý ZIP posielať na cloud.
+- Samostatne zobraziť čas lokálnej zmeny, lokálnej zálohy, kontroly obsahu a nahratia na cloud.
 - Obnoviť vybranú verziu herného save.
 - Upraviť názov hry, save cestu, lokálnu backup cestu aj cloud priamo na karte hry.
 - Zobraziť stav **Aktualizácia!**, keď cloud obsahuje novšiu verziu save-u.
@@ -38,13 +41,27 @@ Požiadavky: 64-bit Windows 10 alebo Windows 11 a internetové pripojenie pre cl
 
 ## Globálne / zapnuté / vypnuté
 
-Každý priečinok a hra má vlastné nastavenie automatického zálohovania:
+Každý priečinok má nastavenie automatického zálohovania na cloud. Pri hrách táto voľba riadi iba nahrávanie na cloud; lokálna záloha sa pri zmene vytvára vždy, kým aplikácia beží:
 
 - **Dediť globálne** — používa hlavný prepínač z Nastavení.
 - **Zapnuté** — automatika je pre túto položku vždy zapnutá.
 - **Vypnuté** — automatika je pre túto položku vždy vypnutá.
 
 Nová záloha pripojená z cloudu má automatiku zámerne vypnutú, aby sa hneď po obnove omylom neprepísal cloud.
+
+## Herné save súbory a lokálne zálohy
+
+Pri pridaní hry vyber celý save priečinok (napríklad `StardewValley/Saves`) a samostatný priečinok pre ZIP zálohy. Appka sleduje aj súbory vo všetkých farmách a nové farmy. Miesto záloh môžeš zmeniť cez **Upraviť hru**; nesmie ležať vo vnútri save priečinka.
+
+Kontrola používa relatívne cesty a SHA-256 obsahu súborov. Zachytí pridanie, premenovanie, odstránenie aj zmenu rovnako veľkého súboru so zachovaným dátumom. Pri spustení a každých 30 sekúnd kontroluje obsah aj bez udalosti systému. Nedostupný priečinok alebo chyba sledovania sa zobrazí na karte hry.
+
+Pred novou zálohou appka počká aspoň dve sekundy bez zmeny obsahu (alebo dlhšie podľa nastaveného debounce). Obsah ZIPu aj zdroj znovu overí. Ak hra počas balenia zapisuje, zálohu zopakuje. Nedokončený ZIP sa nezverejní ako hotová záloha. Prázdny alebo nedostupný save priečinok sa nenahrá na cloud.
+
+Lokálne ZIPy sa ukladajú do podpriečinka `<názov hry>-<ID>` vo vybranom priečinku záloh. Nevzniká ďalší ZIP pre nezmenený obsah; poškodená alebo chýbajúca posledná záloha sa vytvorí znova. Pri chybe cloudu zostáva overený lokálny ZIP uložený a ďalší pokus ho môže použiť. Staršie ZIPy sa automaticky nemažú.
+
+**Verzie** obsahujú cloudové verzie; lokálny save sa v nich objaví až po úspešnom nahratí. **Zálohovať lokálne** skontroluje save a uloží ZIP bez nahrávania. Stav synchronizácie vychádza z obsahu poslednej úspešne nahratej alebo obnovenej verzie.
+
+Staršie záznamy nemajú obsahový odtlačok cloudovej verzie. Po aktualizácii preto vznikne lokálna záloha, ale pred prvým automatickým nahratím treba overiť správny save a raz použiť **Nahrať na cloud**. Pri obnove alebo napojení z cloudu sa odtlačok načíta z obnovenej zálohy. Symbolické odkazy v save priečinku sa do ZIPu nezahŕňajú.
 
 ## Prenos priečinka na iný PC
 
@@ -61,12 +78,12 @@ Aplikácia uloží rovnaké cloud ID. Obe PC potom pracujú s rovnakou priečink
 1. Na novom PC sa prihlás do rovnakého Google účtu.
 2. Otvor **Hry → Vybrať z cloudu**.
 3. Vyber hru zo zoznamu záloh — vidíš dátum poslednej verzie, počet verzií aj veľkosť.
-4. Skontroluj názov hry a vyber priečinok na tomto PC, kam sa má hra synchronizovať.
+4. Skontroluj názov hry, vyber save priečinok na tomto PC a miesto lokálnych ZIP záloh.
 5. Klikni **Stiahnuť a napojiť**.
 
 Stiahne sa najnovšia verzia save a hra sa pridá medzi sledované. Automatické nahrávanie je pre novo napojenú hru zámerne vypnuté.
-Ak vybraný lokálny priečinok už obsahuje save súbory, aplikácia ich najprv uloží do ZIPu v
-`Backup Sync local saves` vedľa vybraného priečinka. Cloud save sa potom rozbalí priamo do
+Ak vybraný lokálny priečinok už obsahuje save súbory, aplikácia ich najprv uloží do ZIPu vo
+vybranom priečinku lokálnych záloh. Cloud save sa potom rozbalí priamo do
 vybraného priečinka, bez pridania ďalšieho vnoreného priečinka.
 
 ## Ulož.to Disk
@@ -92,7 +109,7 @@ Aplikácia používa PKCE, kontrolu OAuth `state` a iba scope `drive.file`. Clie
 
 Pre verejný release musí byť OAuth consent screen v Google Cloud nastavený na **In production**. V režime **Testing** fungujú iba testovací používatelia a refresh token môže po siedmich dňoch vypršať.
 
-## Dôležité limity v0.4.2
+## Dôležité limity v0.4.3
 
 - Stav **Aktualizácia!** porovnáva najnovšiu cloud verziu s poslednou známou verziou hry. Konflikt zmien z dvoch PC aplikácia automaticky nerieši; smer operácie vyberá používateľ.
 - Priečinková záloha prepíše súbor s rovnakou cestou, ale nemaže súbory, ktoré zostali iba na cloude. Obnova prepíše rovnaké lokálne súbory a ostatné lokálne súbory ponechá.

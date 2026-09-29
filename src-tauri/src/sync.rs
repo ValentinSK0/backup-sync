@@ -221,8 +221,24 @@ fn backup_local_save_before_cloud(
         stamp,
         uuid::Uuid::new_v4()
     ));
-    crate::archive::zip_dir_to(destination, &archive, level)
-        .map_err(|e| format!("Pôvodný save sa nepodarilo zazálohovať: {e}"))?;
+    let before = crate::game_save::scan(destination)?;
+    let backup_result = (|| {
+        crate::archive::zip_dir_to(destination, &archive, level)
+            .map_err(|e| format!("Pôvodný save sa nepodarilo zazálohovať: {e}"))?;
+        if crate::game_save::scan_archive(&archive)? != before
+            || crate::game_save::scan(destination)? != before
+        {
+            return Err(
+                "Hra počas ochrannej zálohy zmenila save. Obnovu zopakuj po dokončení zápisu hry."
+                    .into(),
+            );
+        }
+        Ok::<(), String>(())
+    })();
+    if let Err(error) = backup_result {
+        let _ = std::fs::remove_file(&archive);
+        return Err(error);
+    }
     Ok(Some(archive))
 }
 
@@ -950,67 +966,255 @@ fn set_game_restore_result(
     }
 }
 
-/// Zabalí save priečinok do zipu a nahrá ako novú verziu na cloud.
+/// Keep the verified local ZIP even when the provider is unavailable.
 pub async fn upload_game(app: &AppHandle, id: &str) -> Result<(), String> {
-    let _sync = begin_sync(app, "game", id)?;
-    let cfg = with_config(app, |c| {
-        if let Some(g) = c.games.iter_mut().find(|g| g.id == id) {
-            g.sync_state = SyncState::Syncing;
-            g.last_error = None;
+    sync_game_save(app, id, GameSaveAction::Upload).await
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum GameSaveAction {
+    Check,
+    Local,
+    Upload,
+}
+
+pub async fn backup_game_local(app: &AppHandle, id: &str) -> Result<(), String> {
+    sync_game_save(app, id, GameSaveAction::Local).await
+}
+
+pub async fn check_game_save(app: &AppHandle, id: &str) -> Result<(), String> {
+    sync_game_save(app, id, GameSaveAction::Check).await
+}
+
+async fn scan_game_save(path: &str) -> Result<crate::game_save::Snapshot, String> {
+    let path = PathBuf::from(path);
+    tokio::task::spawn_blocking(move || crate::game_save::scan(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+async fn stable_game_backup(
+    game: &crate::config::Game,
+    cfg: &AppConfig,
+) -> Result<(PathBuf, String), String> {
+    for _ in 0..3 {
+        let before = scan_game_save(&game.save_path).await?;
+        if before.0.is_empty() {
+            return Err("Save priečinok neobsahuje žiadne súbory. Predchádzajúce zálohy zostávajú zachované.".into());
         }
+        tokio::time::sleep(Duration::from_secs(cfg.settings.debounce_seconds.max(2))).await;
+        if scan_game_save(&game.save_path).await? != before {
+            continue;
+        }
+        let root = PathBuf::from(&game.save_path);
+        let directory =
+            PathBuf::from(&game.backup_path).join(format!("{}-{}", sanitize(&game.name), game.id));
+        let fingerprint = before.fingerprint();
+        let level = cfg.settings.compression_level;
+        let result = tokio::task::spawn_blocking(move || {
+            crate::game_save::create_backup(&root, &directory, &before, level)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+        match result {
+            Ok(path) => return Ok((path, fingerprint)),
+            Err(error) => {
+                if scan_game_save(&game.save_path).await?.fingerprint() == fingerprint {
+                    return Err(error);
+                }
+            }
+        }
+    }
+    Err("Hra stále zapisuje save. Kontrola a záloha sa zopakujú automaticky.".into())
+}
+
+async fn reusable_game_backup(game: &crate::config::Game, hash: &str) -> Option<PathBuf> {
+    if game.local.backup_hash.as_deref() != Some(hash) {
+        return None;
+    }
+    let path = PathBuf::from(game.local.backup_file.as_ref()?);
+    if !comparable_path(&path).starts_with(comparable_path(Path::new(&game.backup_path))) {
+        return None;
+    }
+    let archive = path.clone();
+    let fingerprint = tokio::task::spawn_blocking(move || {
+        crate::game_save::scan_archive(&archive).map(|s| s.fingerprint())
     })
-    .await?;
+    .await
+    .ok()?
+    .ok()?;
+    (fingerprint == hash).then_some(path)
+}
+
+fn record_game_observation(game: &mut crate::config::Game, hash: &str) {
+    if game.local.observed_hash.as_deref() != Some(hash) {
+        game.last_change = Some(now_iso());
+    }
+    game.local.observed_hash = Some(hash.to_string());
+    game.local.last_check = Some(now_iso());
+}
+
+fn should_upload_game(
+    game: &crate::config::Game,
+    cfg: &AppConfig,
+    action: GameSaveAction,
+    hash: &str,
+) -> bool {
+    action == GameSaveAction::Upload
+        || (action == GameSaveAction::Check
+        && game.auto_upload.unwrap_or(cfg.settings.auto_upload_saves)
+        // Legacy versions have no content baseline: require one explicit upload.
+        && (game.last_cloud_version_id.is_none() || game.local.uploaded_hash.is_some())
+        && game.local.uploaded_hash.as_deref() != Some(hash))
+}
+
+async fn sync_game_save(app: &AppHandle, id: &str, action: GameSaveAction) -> Result<(), String> {
+    let _guard = match begin_sync(app, "game", id) {
+        Ok(guard) => guard,
+        Err(_) if action == GameSaveAction::Check => {
+            record_pending_change(app, "game", id);
+            return Ok(());
+        }
+        Err(error) => return Err(error),
+    };
+    let cfg = snapshot(app).await;
     let game = cfg
         .games
         .iter()
         .find(|g| g.id == id)
         .cloned()
-        .ok_or_else(|| "Hra sa nenašla.".to_string())?;
-
-    emit_progress(app, "game", id, "uploading", Some("Balím save…".into()));
-    let result = upload_game_inner(app, &game, &cfg).await;
-
-    with_config(app, |c| {
-        let changed = take_pending_change(app, "game", id);
-        set_game_result(c, id, &result, changed);
-    })
-    .await?;
-    match &result {
-        Ok(_) => emit_progress(app, "game", id, "done", Some("Save nahraný".into())),
-        Err(e) => emit_progress(app, "game", id, "error", Some(e.clone())),
+        .ok_or("Hra sa nenašla.")?;
+    let result = async {
+        let initial_hash = scan_game_save(&game.save_path).await?.fingerprint();
+        let backup = reusable_game_backup(&game, &initial_hash).await;
+        let upload = should_upload_game(&game, &cfg, action, &initial_hash);
+        with_config(app, |c| {
+            if let Some(g) = c.games.iter_mut().find(|g| g.id == id) {
+                record_game_observation(g, &initial_hash);
+                g.sync_state = if backup.is_none() || upload {
+                    SyncState::Syncing
+                } else if g.local.uploaded_hash.as_deref() == Some(&initial_hash) {
+                    SyncState::Synced
+                } else {
+                    SyncState::Changed
+                };
+                if backup.is_none() || upload || action == GameSaveAction::Local {
+                    g.last_error = None;
+                }
+            }
+        })
+        .await?;
+        if backup.is_some() && !upload {
+            return Ok(());
+        }
+        emit_progress(
+            app,
+            "game",
+            id,
+            "uploading",
+            Some("Overujem a zálohujem save…".into()),
+        );
+        let (zip, hash) = match backup {
+            Some(path) => (path, initial_hash),
+            None => {
+                let (path, hash) = stable_game_backup(&game, &cfg).await?;
+                with_config(app, |c| {
+                    if let Some(g) = c.games.iter_mut().find(|g| g.id == id) {
+                        g.local.last_backup = Some(now_iso());
+                        g.local.backup_file = Some(path.to_string_lossy().into_owned());
+                        g.local.backup_hash = Some(hash.clone());
+                    }
+                })
+                .await?;
+                (path, hash)
+            }
+        };
+        let current_cfg = snapshot(app).await;
+        let current_game = current_cfg
+            .games
+            .iter()
+            .find(|g| g.id == id)
+            .ok_or("Hra sa nenašla.")?;
+        let upload = upload && should_upload_game(current_game, &current_cfg, action, &hash);
+        let uploaded = if upload {
+            emit_progress(
+                app,
+                "game",
+                id,
+                "uploading",
+                Some("Lokálna záloha je uložená. Nahrávam na cloud…".into()),
+            );
+            let storage = make_provider(game.provider, &cfg)?;
+            let name = format!(
+                "{}_{}_{}.zip",
+                sanitize(&game.name),
+                chrono::Local::now().format("%Y-%m-%d_%H-%M-%S-%3f"),
+                uuid::Uuid::new_v4()
+            );
+            Some(
+                storage
+                    .upload_file(&game_remote_dir_for(&game), &name, &zip)
+                    .await?,
+            )
+        } else {
+            None
+        };
+        // Persist cloud success before the follow-up scan, which can itself fail.
+        with_config(app, |c| {
+            if let Some(version) = &uploaded {
+                set_game_result(c, id, &Ok(version.clone()), true);
+            }
+            if let Some(g) = c.games.iter_mut().find(|g| g.id == id) {
+                if uploaded.is_some() {
+                    g.local.uploaded_hash = Some(hash);
+                }
+            }
+        })
+        .await?;
+        let current = scan_game_save(&game.save_path).await?.fingerprint();
+        with_config(app, |c| {
+            take_pending_change(app, "game", id);
+            if let Some(g) = c.games.iter_mut().find(|g| g.id == id) {
+                record_game_observation(g, &current);
+                g.sync_state = if g.local.uploaded_hash.as_deref() == Some(&current) {
+                    SyncState::Synced
+                } else {
+                    SyncState::Changed
+                };
+                g.last_error = None;
+            }
+        })
+        .await?;
+        emit_progress(
+            app,
+            "game",
+            id,
+            "done",
+            Some(
+                if upload {
+                    "Save zálohovaný lokálne aj na cloud"
+                } else {
+                    "Save zálohovaný lokálne"
+                }
+                .into(),
+            ),
+        );
+        Ok::<(), String>(())
     }
-    result.map(|_| ())
-}
-
-async fn upload_game_inner(
-    app: &AppHandle,
-    game: &crate::config::Game,
-    cfg: &AppConfig,
-) -> Result<String, String> {
-    let save_path = PathBuf::from(&game.save_path);
-    let level = cfg.settings.compression_level;
-    let zip_path = {
-        let save_path = save_path.clone();
-        tokio::task::spawn_blocking(move || crate::archive::zip_dir(&save_path, level))
-            .await
-            .map_err(|e| e.to_string())??
-    };
-
-    let storage = make_provider(game.provider, cfg)?;
-    let stamp = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S-%3f");
-    let name = format!("{}_{}.zip", sanitize(&game.name), stamp);
-    emit_progress(
-        app,
-        "game",
-        &game.id,
-        "uploading",
-        Some(format!("Nahrávam {name}…")),
-    );
-    let upload = storage
-        .upload_file(&game_remote_dir_for(game), &name, &zip_path)
-        .await;
-    let _ = std::fs::remove_file(&zip_path);
-    upload
+    .await;
+    if let Err(error) = &result {
+        with_config(app, |c| {
+            if let Some(g) = c.games.iter_mut().find(|g| g.id == id) {
+                g.sync_state = SyncState::Error;
+                g.last_error = Some(error.clone());
+            }
+        })
+        .await?;
+        if game.last_error.as_ref() != Some(error) || action != GameSaveAction::Check {
+            emit_progress(app, "game", id, "error", Some(error.clone()));
+        }
+    }
+    result
 }
 
 /// Zoznam verzií save-ov hry na cloude (najnovšie prvé).
@@ -1101,16 +1305,6 @@ pub async fn restore_game_version(
     let backup_path = game.backup_path.clone();
     let backup_game_name = game.name.clone();
     let backup_level = cfg.settings.compression_level;
-    tokio::task::spawn_blocking(move || {
-        backup_local_save_before_cloud(
-            &backup_destination,
-            &backup_path,
-            &backup_game_name,
-            backup_level,
-        )
-    })
-    .await
-    .map_err(|e| e.to_string())??;
     emit_progress(
         app,
         "game",
@@ -1119,6 +1313,16 @@ pub async fn restore_game_version(
         Some("Sťahujem verziu…".into()),
     );
     let result = async {
+        tokio::task::spawn_blocking(move || {
+            backup_local_save_before_cloud(
+                &backup_destination,
+                &backup_path,
+                &backup_game_name,
+                backup_level,
+            )
+        })
+        .await
+        .map_err(|e| e.to_string())??;
         let storage = make_provider(game.provider, &cfg)?;
         let selected = storage
             .list_files(&game_remote_dir_for(&game))
@@ -1137,6 +1341,9 @@ pub async fn restore_game_version(
                 .await
                 .map_err(|e| e.to_string())??;
         }
+        let cloud_hash = scan_game_save(&staging.to_string_lossy())
+            .await?
+            .fingerprint();
         suppress_watcher(app, &game.save_path, Duration::from_secs(30));
         let destination = PathBuf::from(&game.save_path);
         let staging_for_copy = staging.clone();
@@ -1144,21 +1351,32 @@ pub async fn restore_game_version(
             .await
             .map_err(|e| e.to_string())??;
         suppress_watcher(app, &game.save_path, Duration::from_secs(15));
-        Ok::<(), String>(())
+        let local_hash = scan_game_save(&game.save_path).await?.fingerprint();
+        Ok::<_, String>((cloud_hash, local_hash))
     }
     .await;
     let _ = std::fs::remove_file(&tmp);
     let _ = std::fs::remove_dir_all(&staging);
     with_config(app, |config| {
         let changed = take_pending_change(app, "game", id);
-        set_game_restore_result(config, id, &result, changed, version_id);
+        let status = result.as_ref().map(|_| ()).map_err(Clone::clone);
+        set_game_restore_result(config, id, &status, changed, version_id);
+        if let (Ok((cloud_hash, local_hash)), Some(game)) =
+            (&result, config.games.iter_mut().find(|g| g.id == id))
+        {
+            game.local.uploaded_hash = Some(cloud_hash.clone());
+            record_game_observation(game, local_hash);
+            if cloud_hash != local_hash {
+                game.sync_state = SyncState::Changed;
+            }
+        }
     })
     .await?;
     match &result {
-        Ok(()) => emit_progress(app, "game", id, "done", Some("Verzia obnovená".into())),
+        Ok(_) => emit_progress(app, "game", id, "done", Some("Verzia obnovená".into())),
         Err(error) => emit_progress(app, "game", id, "error", Some(error.clone())),
     }
-    result
+    result.map(|_| ())
 }
 
 /// Zoznam všetkých herných záloh na cloude (čitateľne), najnovšie prvé.
@@ -1217,6 +1435,7 @@ pub async fn connect_game_backup(
     cloud_id: &str,
     destination: &str,
     display_name: &str,
+    backup_path: &str,
 ) -> Result<AppConfig, String> {
     if !Path::new(destination).is_dir() {
         return Err(format!("Cieľový priečinok neexistuje: {destination}"));
@@ -1261,8 +1480,14 @@ pub async fn connect_game_backup(
     let backup_destination = destination_path.clone();
     let backup_game_name = name.clone();
     let backup_level = cfg.settings.compression_level;
+    let local_backup_path = backup_path.to_string();
     let _local_backup = tokio::task::spawn_blocking(move || {
-        backup_local_save_before_cloud(&backup_destination, "", &backup_game_name, backup_level)
+        backup_local_save_before_cloud(
+            &backup_destination,
+            &local_backup_path,
+            &backup_game_name,
+            backup_level,
+        )
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -1277,6 +1502,9 @@ pub async fn connect_game_backup(
                 .await
                 .map_err(|e| e.to_string())??;
         }
+        let cloud_hash = scan_game_save(&staging.to_string_lossy())
+            .await?
+            .fingerprint();
         suppress_watcher(app, destination, Duration::from_secs(30));
         {
             let staging = staging.clone();
@@ -1286,12 +1514,13 @@ pub async fn connect_game_backup(
                 .map_err(|e| e.to_string())??;
         }
         suppress_watcher(app, destination, Duration::from_secs(15));
-        Ok::<(), String>(())
+        let local_hash = scan_game_save(destination).await?.fingerprint();
+        Ok::<_, String>((cloud_hash, local_hash))
     }
     .await;
     let _ = std::fs::remove_file(&tmp);
     let _ = std::fs::remove_dir_all(&staging);
-    result?;
+    let (cloud_hash, local_hash) = result?;
 
     with_config(app, |config| {
         config.games.push(crate::config::Game {
@@ -1299,19 +1528,24 @@ pub async fn connect_game_backup(
             name,
             save_path: destination.to_string(),
             cloud_name: folder.name,
-            backup_path: destination_path
-                .parent()
-                .unwrap_or(destination_path.as_path())
-                .join("Backup Sync local saves")
-                .to_string_lossy()
-                .to_string(),
+            backup_path: backup_path.to_string(),
             provider,
             auto_upload: Some(false),
-            sync_state: SyncState::Synced,
+            sync_state: if cloud_hash == local_hash {
+                SyncState::Synced
+            } else {
+                SyncState::Changed
+            },
             last_change: None,
             last_upload: latest.modified_at,
             last_cloud_version_id: Some(latest.id),
             last_error: None,
+            local: crate::config::GameLocalState {
+                observed_hash: Some(local_hash),
+                uploaded_hash: Some(cloud_hash),
+                last_check: Some(now_iso()),
+                ..Default::default()
+            },
         });
     })
     .await
@@ -1320,6 +1554,130 @@ pub async fn connect_game_backup(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_game() -> crate::config::Game {
+        serde_json::from_value(serde_json::json!({
+            "id": "test-game", "name": "Stardew Valley", "savePath": "unused",
+            "provider": "gdrive", "autoUpload": true, "syncState": "synced"
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn legacy_games_need_content_baseline_before_automatic_cloud_upload() {
+        let mut game = test_game();
+        game.last_cloud_version_id = Some("legacy-version".into());
+        assert!(game.local.observed_hash.is_none());
+        assert!(!should_upload_game(
+            &game,
+            &AppConfig::default(),
+            GameSaveAction::Check,
+            "new"
+        ));
+        assert!(should_upload_game(
+            &game,
+            &AppConfig::default(),
+            GameSaveAction::Upload,
+            "new"
+        ));
+    }
+
+    #[test]
+    fn restart_preserves_baseline_and_detects_offline_changes_without_duplicate_uploads() {
+        let mut game = test_game();
+        game.local.uploaded_hash = Some("old".into());
+        game.local.observed_hash = Some("old".into());
+        let json = serde_json::to_string(&game).unwrap();
+        let mut restored: crate::config::Game = serde_json::from_str(&json).unwrap();
+        let cfg = AppConfig::default();
+        assert!(!should_upload_game(
+            &restored,
+            &cfg,
+            GameSaveAction::Check,
+            "old"
+        ));
+        record_game_observation(&mut restored, "changed-while-app-was-off");
+        assert!(should_upload_game(
+            &restored,
+            &cfg,
+            GameSaveAction::Check,
+            "changed-while-app-was-off"
+        ));
+        assert!(!should_upload_game(
+            &restored,
+            &cfg,
+            GameSaveAction::Local,
+            "changed-while-app-was-off"
+        ));
+        restored.auto_upload = Some(false);
+        assert!(!should_upload_game(
+            &restored,
+            &cfg,
+            GameSaveAction::Check,
+            "new"
+        ));
+    }
+
+    #[tokio::test]
+    async fn local_snapshot_survives_cloud_failure_and_corruption_is_not_reused() {
+        let root = temp_test_dir("cloud-failure");
+        let mut game = test_game();
+        game.save_path = root.join("Saves").to_string_lossy().into_owned();
+        game.backup_path = root.join("Backups").to_string_lossy().into_owned();
+        std::fs::create_dir_all(Path::new(&game.save_path).join("Farm2")).unwrap();
+        std::fs::write(Path::new(&game.save_path).join("Farm2/save"), b"farm-data").unwrap();
+        let mut cfg = AppConfig::default();
+        let (archive, hash) = stable_game_backup(&game, &cfg).await.unwrap();
+        game.local.backup_file = Some(archive.to_string_lossy().into_owned());
+        game.local.backup_hash = Some(hash.clone());
+        game.local.last_backup = Some(now_iso());
+        cfg.games.push(game.clone());
+        let failure = make_provider(game.provider, &cfg)
+            .err()
+            .expect("disconnected cloud must fail");
+        set_game_result(&mut cfg, &game.id, &Err(failure), false);
+        assert_eq!(
+            cfg.games[0].local.backup_hash.as_deref(),
+            Some(hash.as_str())
+        );
+        assert!(cfg.games[0].local.uploaded_hash.is_none());
+        assert_eq!(
+            reusable_game_backup(&cfg.games[0], &hash).await,
+            Some(archive.clone())
+        );
+        std::fs::write(&archive, b"corrupted-zip").unwrap();
+        assert!(reusable_game_backup(&cfg.games[0], &hash).await.is_none());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn backup_waits_for_nested_save_writes_to_finish() {
+        let root = temp_test_dir("busy-save");
+        let mut game = test_game();
+        game.save_path = root.join("Saves").to_string_lossy().into_owned();
+        game.backup_path = root.join("Backups").to_string_lossy().into_owned();
+        std::fs::create_dir_all(Path::new(&game.save_path).join("Farm2")).unwrap();
+        let file = Path::new(&game.save_path).join("Farm2/save");
+        std::fs::write(&file, b"previous-save").unwrap();
+        let writer = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            std::fs::write(file, b"completed-new-save").unwrap();
+        });
+        let (archive, hash) = stable_game_backup(&game, &AppConfig::default())
+            .await
+            .unwrap();
+        writer.await.unwrap();
+        let source = crate::game_save::scan(Path::new(&game.save_path)).unwrap();
+        assert_eq!(source.fingerprint(), hash);
+        assert_eq!(crate::game_save::scan_archive(&archive).unwrap(), source);
+        assert_eq!(
+            std::fs::read_dir(archive.parent().unwrap())
+                .unwrap()
+                .count(),
+            1
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     fn temp_test_dir(label: &str) -> PathBuf {
         std::env::temp_dir().join(format!("backup-sync-test-{label}-{}", uuid::Uuid::new_v4()))

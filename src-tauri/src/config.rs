@@ -65,7 +65,7 @@ pub struct Game {
     /// Stabilný názov priečinka hry na cloude. Názov v aplikácii môže používateľ meniť.
     #[serde(default)]
     pub cloud_name: String,
-    /// Miesto pre lokálne ZIP zálohy pred stiahnutím alebo obnovením save-u z cloudu.
+    /// Miesto pre automatické lokálne ZIP zálohy a ochranné zálohy pred obnovou.
     #[serde(default)]
     pub backup_path: String,
     pub provider: Provider,
@@ -82,6 +82,20 @@ pub struct Game {
     pub last_cloud_version_id: Option<String>,
     #[serde(default)]
     pub last_error: Option<String>,
+    #[serde(default)]
+    pub local: GameLocalState,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct GameLocalState {
+    pub observed_hash: Option<String>,
+    pub backup_hash: Option<String>,
+    pub uploaded_hash: Option<String>,
+    pub last_backup: Option<String>,
+    pub backup_file: Option<String>,
+    pub last_check: Option<String>,
+    pub watch_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
