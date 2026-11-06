@@ -37,6 +37,34 @@ export interface Game {
     lastCheck: string | null;
     watchError: string | null;
   };
+  artwork: GameArtwork | null;
+  artworkCheckedName: string | null;
+}
+
+export interface GameArtwork {
+  source: "steam" | "steamgriddb";
+  gameId: number;
+  gameName: string;
+  imageId: number;
+  kind: "grid" | "hero";
+  url: string;
+  author: string;
+  selectedManually: boolean;
+}
+
+export interface ArtworkGame {
+  id: number;
+  name: string;
+}
+
+export interface ArtworkImage {
+  id: number;
+  url: string;
+  thumb: string;
+  width: number;
+  height: number;
+  score: number;
+  author: { name: string };
 }
 
 export interface GameCloudStatus {

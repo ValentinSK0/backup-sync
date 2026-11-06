@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type {
   AppConfig,
+  ArtworkGame,
+  ArtworkImage,
   CloudFolderBackup,
   CloudGameBackup,
   GameCloudStatus,
@@ -12,6 +14,45 @@ import type {
 
 export function getConfig(): Promise<AppConfig> {
   return invoke<AppConfig>("get_config");
+}
+
+export function searchArtworkGames(query: string): Promise<ArtworkGame[]> {
+  return invoke<ArtworkGame[]>("search_artwork_games", { query });
+}
+
+export function listArtworkImages(
+  gameId: number,
+  kind: "grid" | "hero",
+  page: number,
+): Promise<ArtworkImage[]> {
+  return invoke<ArtworkImage[]>("list_artwork_images", { gameId, kind, page });
+}
+
+export function loadGameArtwork(
+  id: string,
+  automatic: boolean,
+): Promise<string | null> {
+  return invoke<string | null>("load_game_artwork", { id, automatic });
+}
+
+export function selectGameArtwork(
+  id: string,
+  gameId: number,
+  kind: "grid" | "hero",
+  page: number,
+  imageId: number,
+): Promise<AppConfig> {
+  return invoke<AppConfig>("select_game_artwork", {
+    id,
+    gameId,
+    kind,
+    page,
+    imageId,
+  });
+}
+
+export function clearGameArtwork(id: string): Promise<AppConfig> {
+  return invoke<AppConfig>("clear_game_artwork", { id });
 }
 
 export function updateSettings(settings: Settings): Promise<AppConfig> {
@@ -52,7 +93,12 @@ export function addGame(
   provider: Provider,
   backupPath: string,
 ): Promise<AppConfig> {
-  return invoke<AppConfig>("add_game", { name, savePath, provider, backupPath });
+  return invoke<AppConfig>("add_game", {
+    name,
+    savePath,
+    provider,
+    backupPath,
+  });
 }
 
 export function removeGame(id: string): Promise<AppConfig> {

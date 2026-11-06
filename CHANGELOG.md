@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 — 2026-11-06
+
+- Nový dizajn herných kartičiek v mriežke aj zozname s prehľadnejšími stavmi záloh.
+- Automatické obrázky hier z verejného katalógu Steam bez prihlasovania a API kľúča.
+- Výber vlastného obalu, pozadia alebo screenshotu v nastaveniach hry.
+- Galéria sa načíta až po kliknutí na „Vybrať obrázok“ a vybraný obrázok zostáva uložený aj po reštarte.
+- Lokálna cache obrázkov pre zobrazenie bez internetu a ochrana pred nesprávnym priradením hry.
+- Aktualizované závislosti pre TLS, ZIP archívy a sieťovú komunikáciu.
+
 ## 0.1.1 — 2026-07-16
 
 - Opravené Google OAuth prihlásenie pre klientov vyžadujúcich Client Secret.

@@ -211,6 +211,8 @@ pub async fn add_game(
             last_cloud_version_id: None,
             last_error: None,
             local: Default::default(),
+            artwork: None,
+            artwork_checked_name: None,
         });
     })
     .await?;
@@ -261,6 +263,15 @@ pub async fn update_game(
         if let Some(game) = config.games.iter_mut().find(|game| game.id == id) {
             if game.cloud_name.trim().is_empty() {
                 game.cloud_name = sync::game_cloud_name(&game.name);
+            }
+            if game.name != name
+                && !game
+                    .artwork
+                    .as_ref()
+                    .is_some_and(|artwork| artwork.selected_manually)
+            {
+                game.artwork = None;
+                game.artwork_checked_name = None;
             }
             game.name = name;
             game.save_path = save_path;

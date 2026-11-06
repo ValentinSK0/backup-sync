@@ -84,6 +84,29 @@ pub struct Game {
     pub last_error: Option<String>,
     #[serde(default)]
     pub local: GameLocalState,
+    #[serde(default)]
+    pub artwork: Option<GameArtwork>,
+    #[serde(default)]
+    pub artwork_checked_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameArtwork {
+    #[serde(default = "legacy_artwork_source")]
+    pub source: String,
+    pub game_id: u64,
+    pub game_name: String,
+    pub image_id: u64,
+    pub kind: String,
+    pub url: String,
+    pub author: String,
+    #[serde(default)]
+    pub selected_manually: bool,
+}
+
+fn legacy_artwork_source() -> String {
+    "steamgriddb".into()
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

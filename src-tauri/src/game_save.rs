@@ -66,7 +66,7 @@ pub fn scan_archive(path: &Path) -> Result<Snapshot, String> {
     for index in 0..archive.len() {
         let entry = archive.by_index(index).map_err(|e| e.to_string())?;
         if entry.is_file() {
-            let name = entry.name().replace('\\', "/");
+            let name = entry.name().map_err(|e| e.to_string())?.replace('\\', "/");
             if files.insert(name, digest_reader(entry)?).is_some() {
                 return Err("ZIP obsahuje duplicitné save súbory.".into());
             }

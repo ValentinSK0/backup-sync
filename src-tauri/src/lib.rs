@@ -1,4 +1,5 @@
 mod archive;
+mod artwork;
 mod commands;
 mod config;
 mod game_save;
@@ -16,6 +17,7 @@ use std::time::Instant;
 use tauri::Manager;
 
 pub struct AppState {
+    pub artwork: artwork::ArtworkService,
     pub config: tokio::sync::Mutex<AppConfig>,
     pub config_dir: PathBuf,
     /// cesty, ktorých zmeny watcher dočasne ignoruje (počas obnovy zálohy)
@@ -99,6 +101,7 @@ pub fn run() {
             }
 
             let state = AppState {
+                artwork: artwork::ArtworkService::default(),
                 config: tokio::sync::Mutex::new(cfg.clone()),
                 config_dir,
                 suppress: Arc::new(StdMutex::new(HashMap::new())),
@@ -115,6 +118,11 @@ pub fn run() {
             commands::get_config,
             commands::update_settings,
             commands::save_gdrive_credentials,
+            artwork::search_artwork_games,
+            artwork::list_artwork_images,
+            artwork::load_game_artwork,
+            artwork::select_game_artwork,
+            artwork::clear_game_artwork,
             commands::add_watched_folder,
             commands::remove_watched_folder,
             commands::set_folder_auto_backup,

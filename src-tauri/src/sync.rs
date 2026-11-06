@@ -1529,6 +1529,8 @@ pub async fn connect_game_backup(
             save_path: destination.to_string(),
             cloud_name: folder.name,
             backup_path: backup_path.to_string(),
+            artwork: None,
+            artwork_checked_name: None,
             provider,
             auto_upload: Some(false),
             sync_state: if cloud_hash == local_hash {

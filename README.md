@@ -49,6 +49,12 @@ Každý priečinok má nastavenie automatického zálohovania na cloud. Pri hrá
 
 Nová záloha pripojená z cloudu má automatiku zámerne vypnutú, aby sa hneď po obnove omylom neprepísal cloud.
 
+## Obrázky herných kartičiek
+
+Obrázky sa automaticky vyhľadajú podľa názvu hry vo verejnom katalógu Steam. Prihlasovanie ani API kľúč netreba. V nastaveniach kartičky klikni na **Vybrať obrázok** a vyber obal, pozadie alebo screenshot. Galéria sa načíta až po kliknutí. Vybraný obrázok sa uloží ku hre a lokálna cache umožní jeho zobrazenie aj bez internetu.
+
+Pri nejasnej zhode vyhľadaj v galérii oficiálny názov hry a vyber správny výsledok.
+
 ## Herné save súbory a lokálne zálohy
 
 Pri pridaní hry vyber celý save priečinok (napríklad `StardewValley/Saves`) a samostatný priečinok pre ZIP zálohy. Appka sleduje aj súbory vo všetkých farmách a nové farmy. Miesto záloh môžeš zmeniť cez **Upraviť hru**; nesmie ležať vo vnútri save priečinka.
@@ -109,7 +115,7 @@ Aplikácia používa PKCE, kontrolu OAuth `state` a iba scope `drive.file`. Clie
 
 Pre verejný release musí byť OAuth consent screen v Google Cloud nastavený na **In production**. V režime **Testing** fungujú iba testovací používatelia a refresh token môže po siedmich dňoch vypršať.
 
-## Dôležité limity v0.4.3
+## Dôležité limity v0.5.0
 
 - Stav **Aktualizácia!** porovnáva najnovšiu cloud verziu s poslednou známou verziou hry. Konflikt zmien z dvoch PC aplikácia automaticky nerieši; smer operácie vyberá používateľ.
 - Priečinková záloha prepíše súbor s rovnakou cestou, ale nemaže súbory, ktoré zostali iba na cloude. Obnova prepíše rovnaké lokálne súbory a ostatné lokálne súbory ponechá.

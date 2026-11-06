@@ -16,9 +16,10 @@ import {
 } from "../api";
 import { ConfirmDialog, Modal } from "../components/Modal";
 import ProviderMenu from "../components/ProviderMenu";
-import StateBadge from "../components/StateBadge";
+import GameCard from "../components/GameCard";
+import GameArtworkPicker from "../components/GameArtworkPicker";
+import { useGameArtwork } from "../artwork";
 import {
-  CloudIcon,
   DownloadIcon,
   FolderIcon,
   GamepadIcon,
@@ -28,13 +29,9 @@ import {
   ListIcon,
   PlusIcon,
   SpinnerIcon,
-  SettingsIcon,
-  TrashIcon,
-  UploadIcon,
 } from "../components/icons";
 import {
   Button,
-  Card,
   EmptyState,
   PageHeader,
   inputCls,
@@ -50,18 +47,6 @@ import type {
   Provider,
   VersionInfo,
 } from "../types";
-
-type AutoUploadOption = "inherit" | "on" | "off";
-
-function autoUploadToOption(value: boolean | null): AutoUploadOption {
-  if (value === null) return "inherit";
-  return value ? "on" : "off";
-}
-
-function optionToAutoUpload(option: AutoUploadOption): boolean | null {
-  if (option === "inherit") return null;
-  return option === "on";
-}
 
 function VersionsModal({ game, onClose }: { game: Game; onClose: () => void }) {
   const { toast } = useApp();
@@ -559,6 +544,8 @@ function EditGameModal({
   const [backupPath, setBackupPath] = useState(game.backupPath);
   const [provider, setProvider] = useState<Provider>(game.provider);
   const [picking, setPicking] = useState<"save" | "backup" | null>(null);
+  const [artworkOpen, setArtworkOpen] = useState(false);
+  const { src: artworkSrc, error: artworkError } = useGameArtwork(game);
 
   async function handlePick(target: "save" | "backup") {
     setPicking(target);
@@ -586,6 +573,13 @@ function EditGameModal({
     if (ok) onClose();
   }
 
+  if (artworkOpen) {
+    return <GameArtworkPicker
+      game={{ ...game, name: name.trim() || game.name }}
+      onClose={() => setArtworkOpen(false)}
+    />;
+  }
+
   return (
     <Modal title={`Upraviť hru: ${game.name}`} onClose={onClose}>
       <form
@@ -595,6 +589,22 @@ function EditGameModal({
           void handleSubmit();
         }}
       >
+        <div className="overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950/40">
+          <div className="relative flex h-32 items-center justify-center overflow-hidden bg-zinc-800/60">
+            {artworkSrc ? <img src={artworkSrc} alt={`Obrázok hry ${game.name}`} className="h-full w-full object-cover" />
+              : <GamepadIcon className="h-10 w-10 text-zinc-600" />}
+          </div>
+          <div className="flex items-center justify-between gap-3 p-3">
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-zinc-200">Obrázok kartičky</p>
+              <p className="mt-1 truncate text-[11px] text-zinc-500">
+                {game.artwork ? `${game.artwork.source === "steam" ? "Steam" : "SteamGridDB"} · ${game.artwork.author || game.artwork.gameName}` : "Automatický výber podľa názvu hry"}
+              </p>
+            </div>
+            <Button disabled={busy !== null} onClick={() => setArtworkOpen(true)}>Vybrať obrázok</Button>
+          </div>
+          {artworkError && <p className="px-3 pb-3 text-xs text-amber-400">{artworkError}</p>}
+        </div>
         <div>
           <label className={labelCls} htmlFor={`edit-game-name-${game.id}`}>
             Názov hry v aplikácii
@@ -707,7 +717,7 @@ export default function Games() {
     } catch {
       // ignore
     }
-    return "list";
+    return "grid";
   });
 
   const handleSetViewMode = (mode: "list" | "grid") => {
@@ -771,7 +781,7 @@ export default function Games() {
         title="Hry"
         subtitle="Automatické zálohovanie save súborov hier na cloud."
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center rounded-lg border border-zinc-800 bg-zinc-900 p-0.5">
               <button
                 type="button"
@@ -783,6 +793,7 @@ export default function Games() {
                 onClick={() => handleSetViewMode("list")}
                 title="Zobrazenie ako zoznam"
                 aria-label="Zobrazenie ako zoznam"
+                aria-pressed={viewMode === "list"}
               >
                 <ListIcon className="h-4 w-4" />
               </button>
@@ -796,6 +807,7 @@ export default function Games() {
                 onClick={() => handleSetViewMode("grid")}
                 title="Zobrazenie ako mriežka"
                 aria-label="Zobrazenie ako mriežka"
+                aria-pressed={viewMode === "grid"}
               >
                 <GridIcon className="h-4 w-4" />
               </button>
@@ -819,425 +831,46 @@ export default function Games() {
           message="Žiadne hry"
           hint="Pridajte hru a vyberte priečinok so save súbormi, alebo stiahnite existujúcu zálohu cez „Vybrať z cloudu“."
         />
-      ) : viewMode === "list" ? (
-        <div className="flex flex-col gap-3">
-          {games.map((g) => {
-            const changed = g.syncState === "changed";
-            const cloudStatus = cloudStatuses[g.id];
-            const hasWaitingBackup = Boolean(
-              g.local.backupHash &&
-                g.local.observedHash &&
-                g.local.backupHash !== g.local.observedHash,
-            );
-            const isUnconfirmedCloud = Boolean(
-              g.local.observedHash &&
-                g.local.uploadedHash !== g.local.observedHash,
-            );
-
-            return (
-              <Card
-                key={g.id}
-                className={`overflow-hidden transition-shadow ${
-                  changed
-                    ? "!border-amber-500/50 ring-2 ring-amber-500/20"
-                    : ""
-                }`}
-              >
-                <div className="flex items-start gap-4 px-5 py-4">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-indigo-500/10 bg-indigo-600/15 text-indigo-400">
-                    <GamepadIcon className="h-6 w-6" />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2.5">
-                      <div
-                        className="min-w-0 truncate text-sm font-semibold text-zinc-100"
-                        title={g.name}
-                      >
-                        {g.name}
-                      </div>
-                      <StateBadge state={g.syncState} />
-                      {cloudStatus?.updateAvailable && (
-                        <span
-                          className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-300"
-                          title={`Cloud má novšiu verziu z ${formatDate(cloudStatus.latestAt)}. Otvor Verzie a obnov ju.`}
-                        >
-                          Aktualizácia!
-                        </span>
-                      )}
-                    </div>
-
-                    <div
-                      className="mt-1 truncate font-mono text-xs text-zinc-500"
-                      title={`Save priečinok: ${g.savePath}\nLokálne ZIP zálohy: ${g.local.backupFile ?? g.backupPath}`}
-                    >
-                      {g.savePath}
-                    </div>
-
-                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
-                      <span className="inline-flex items-center gap-1">
-                        <CloudIcon className="h-3.5 w-3.5" />
-                        {providerLabel(g.provider)}
-                      </span>
-                      <span className="hidden h-1 w-1 rounded-full bg-zinc-700 sm:block" />
-                      <span>Nahratie: {formatDate(g.lastUpload)}</span>
-                      <span className="hidden h-1 w-1 rounded-full bg-zinc-700 sm:block" />
-                      <span>Lokálna záloha: {formatDate(g.local.lastBackup)}</span>
-                      {g.lastChange && (
-                        <>
-                          <span className="hidden h-1 w-1 rounded-full bg-zinc-700 sm:block" />
-                          <span>Zmena: {formatDate(g.lastChange)}</span>
-                        </>
-                      )}
-                      {hasWaitingBackup && (
-                        <span className="text-amber-400 font-medium">· čaká na novú zálohu</span>
-                      )}
-                      {isUnconfirmedCloud && !hasWaitingBackup && (
-                        <span className="text-amber-400 font-medium">· čaká na upload</span>
-                      )}
-                    </div>
-
-                    {g.local.watchError && (
-                      <p className="mt-2 text-xs text-amber-400">{g.local.watchError}</p>
-                    )}
-                    {g.lastCloudVersionId && !g.local.uploadedHash && (
-                      <p className="mt-2 text-xs text-amber-400">
-                        Obsah starej cloudovej verzie ešte nie je overený. Skontroluj save a použi „Nahrať na cloud“.
-                      </p>
-                    )}
-                    {g.lastError && (
-                      <div className="mt-2 break-words rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
-                        {g.lastError}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      className="!p-2 text-zinc-500 hover:!bg-zinc-700/50 hover:!text-zinc-200"
-                      onClick={() => handleOpenFolder(g)}
-                      aria-label={`Otvoriť priečinok hry ${g.name}`}
-                      title="Otvoriť priečinok so save súbormi"
-                    >
-                      <FolderIcon className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      className="!p-2 text-zinc-500 hover:!bg-zinc-700/50 hover:!text-zinc-200"
-                      onClick={() => setEditGame(g)}
-                      aria-label={`Upraviť hru ${g.name}`}
-                      title="Upraviť hru"
-                    >
-                      <SettingsIcon className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      className="!p-2 text-zinc-500 hover:!bg-red-500/10 hover:!text-red-400"
-                      onClick={() => setToRemove(g)}
-                      aria-label={`Odstrániť hru ${g.name}`}
-                      title="Odstrániť hru"
-                    >
-                      <TrashIcon className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800 bg-zinc-950/25 px-5 py-3">
-                  <div className="flex items-center gap-2">
-                    <label
-                      className="text-xs text-zinc-400 whitespace-nowrap"
-                      htmlFor={`auto-upload-${g.id}`}
-                    >
-                      Auto-upload:
-                    </label>
-                    <select
-                      id={`auto-upload-${g.id}`}
-                      className={`${inputCls} !w-36 !py-1 text-xs`}
-                      value={autoUploadToOption(g.autoUpload)}
-                      disabled={busy === `auto:${g.id}`}
-                      onChange={(e) => {
-                        const value = optionToAutoUpload(
-                          e.currentTarget.value as AutoUploadOption,
-                        );
-                        void run(`auto:${g.id}`, () =>
-                          setGameAutoUpload(g.id, value),
-                        );
-                      }}
-                      title="Automatické nahrávanie save súborov"
-                    >
-                      <option value="inherit">Dediť globálne</option>
-                      <option value="on">Zapnuté</option>
-                      <option value="off">Vypnuté</option>
-                    </select>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      variant="secondary"
-                      className="!py-1.5 text-xs whitespace-nowrap"
-                      onClick={() => setVersionsGame(g)}
-                    >
-                      <HistoryIcon className="h-4 w-4" />
-                      Verzie
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      className="!py-1.5 text-xs whitespace-nowrap"
-                      disabled={busy !== null || g.syncState === "syncing"}
-                      onClick={() =>
-                        run(
-                          `local:${g.id}`,
-                          () => backupGameLocal(g.id),
-                          "Lokálna záloha save je overená.",
-                        )
-                      }
-                      title="Vytvoriť okamžitú lokálnu ZIP zálohu"
-                    >
-                      <FolderIcon className="h-4 w-4" />
-                      Zálohovať lokálne
-                    </Button>
-                    <Button
-                      variant={g.syncState === "synced" ? "secondary" : "primary"}
-                      className="!py-1.5 text-xs whitespace-nowrap"
-                      loading={
-                        busy === `upload:${g.id}` || g.syncState === "syncing"
-                      }
-                      disabled={
-                        (busy !== null && busy !== `upload:${g.id}`) ||
-                        g.syncState === "syncing"
-                      }
-                      onClick={() =>
-                        run(
-                          `upload:${g.id}`,
-                          () => uploadGameSave(g.id),
-                          `Save hry „${g.name}“ nahraný na cloud.`,
-                        )
-                      }
-                    >
-                      <UploadIcon className="h-4 w-4" />
-                      {g.syncState === "error"
-                        ? "Skúsiť znova"
-                        : g.syncState === "syncing"
-                          ? "Prebieha…"
-                          : g.syncState === "synced"
-                            ? "Nahrať znova"
-                            : "Nahrať na cloud"}
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-          {games.map((g) => {
-            const changed = g.syncState === "changed";
-            const cloudStatus = cloudStatuses[g.id];
-            const hasWaitingBackup = Boolean(
-              g.local.backupHash &&
-                g.local.observedHash &&
-                g.local.backupHash !== g.local.observedHash,
-            );
-            const isUnconfirmedCloud = Boolean(
-              g.local.observedHash &&
-                g.local.uploadedHash !== g.local.observedHash,
-            );
-
-            return (
-              <Card
-                key={g.id}
-                className={`flex flex-col justify-between overflow-hidden transition-shadow ${
-                  changed
-                    ? "!border-amber-500/50 ring-2 ring-amber-500/20"
-                    : ""
-                }`}
-              >
-                <div className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-600/15 text-indigo-400">
-                      <GamepadIcon className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold text-zinc-100">
-                        {g.name}
-                      </div>
-                      <div
-                        className="truncate font-mono text-xs text-zinc-500"
-                        title={`Save: ${g.savePath}\nLokálne ZIP zálohy: ${g.local.backupFile ?? g.backupPath}`}
-                      >
-                        {g.savePath}
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      className="!p-1.5 text-zinc-500 hover:!bg-zinc-700/50 hover:!text-zinc-200"
-                      onClick={() => handleOpenFolder(g)}
-                      aria-label={`Otvoriť priečinok hry ${g.name}`}
-                      title="Otvoriť priečinok so save súbormi"
-                    >
-                      <FolderIcon className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      className="!p-1.5 text-zinc-500 hover:!bg-zinc-700/50 hover:!text-zinc-200"
-                      onClick={() => setEditGame(g)}
-                      aria-label={`Upraviť hru ${g.name}`}
-                      title="Upraviť hru"
-                    >
-                      <SettingsIcon className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      className="!p-1.5 text-zinc-500 hover:!bg-red-500/10 hover:!text-red-400"
-                      onClick={() => setToRemove(g)}
-                      aria-label={`Odstrániť hru ${g.name}`}
-                      title="Odstrániť hru"
-                    >
-                      <TrashIcon className="h-4 w-4" />
-                    </Button>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <StateBadge state={g.syncState} />
-                    {cloudStatus?.updateAvailable && (
-                      <span
-                        className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-300"
-                        title={`Cloud má novšiu verziu z ${formatDate(cloudStatus.latestAt)}. Otvor Verzie a obnov ju.`}
-                      >
-                        Aktualizácia!
-                      </span>
-                    )}
-                    <span className="inline-flex items-center gap-1 text-xs text-zinc-500">
-                      <CloudIcon className="h-3.5 w-3.5" />
-                      {providerLabel(g.provider)}
-                    </span>
-                  </div>
-
-                  <div className="mt-2.5 space-y-0.5 text-xs text-zinc-500">
-                    <div className="truncate">
-                      Nahratie: {formatDate(g.lastUpload)}
-                    </div>
-                    <div className="truncate">
-                      Záloha: {formatDate(g.local.lastBackup)}
-                      {hasWaitingBackup && (
-                        <span className="text-amber-400 font-medium"> · čaká na novú</span>
-                      )}
-                      {isUnconfirmedCloud && !hasWaitingBackup && (
-                        <span className="text-amber-400 font-medium"> · neoverené na cloude</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {g.local.watchError && (
-                    <p className="mt-2 text-xs text-amber-400">{g.local.watchError}</p>
-                  )}
-                  {g.lastCloudVersionId && !g.local.uploadedHash && (
-                    <p className="mt-2 text-xs text-amber-400">
-                      Obsah starej cloudovej verzie ešte nie je overený. Skontroluj save a použi „Nahrať na cloud“.
-                    </p>
-                  )}
-                  {g.lastError && (
-                    <div className="mt-2 break-words rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
-                      {g.lastError}
-                    </div>
-                  )}
-                </div>
-
-                <div className="border-t border-zinc-800 bg-zinc-950/25 p-3">
-                  <div className="mb-2 flex items-center gap-2">
-                    <label
-                      className="sr-only"
-                      htmlFor={`auto-upload-grid-${g.id}`}
-                    >
-                      Automatické nahrávanie pre {g.name}
-                    </label>
-                    <select
-                      id={`auto-upload-grid-${g.id}`}
-                      className={`${inputCls} !py-1 text-xs`}
-                      value={autoUploadToOption(g.autoUpload)}
-                      disabled={busy === `auto:${g.id}`}
-                      onChange={(e) => {
-                        const value = optionToAutoUpload(
-                          e.currentTarget.value as AutoUploadOption,
-                        );
-                        void run(`auto:${g.id}`, () =>
-                          setGameAutoUpload(g.id, value),
-                        );
-                      }}
-                      title="Automatické nahrávanie save súborov"
-                    >
-                      <option value="inherit">Dediť globálne</option>
-                      <option value="on">Zapnuté</option>
-                      <option value="off">Vypnuté</option>
-                    </select>
-                    <Button
-                      variant="secondary"
-                      className="!py-1 text-xs whitespace-nowrap"
-                      onClick={() => setVersionsGame(g)}
-                      title="História verzií"
-                    >
-                      <HistoryIcon className="h-3.5 w-3.5" />
-                      Verzie
-                    </Button>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      variant="secondary"
-                      className="!py-1 text-xs whitespace-nowrap"
-                      disabled={busy !== null || g.syncState === "syncing"}
-                      onClick={() =>
-                        run(
-                          `local:${g.id}`,
-                          () => backupGameLocal(g.id),
-                          "Lokálna záloha save je overená.",
-                        )
-                      }
-                      title="Vytvoriť lokálnu ZIP zálohu"
-                    >
-                      <FolderIcon className="h-3.5 w-3.5" />
-                      Zálohovať
-                    </Button>
-                    <Button
-                      variant={g.syncState === "synced" ? "secondary" : "primary"}
-                      className="!py-1 text-xs whitespace-nowrap"
-                      loading={
-                        busy === `upload:${g.id}` || g.syncState === "syncing"
-                      }
-                      disabled={
-                        (busy !== null && busy !== `upload:${g.id}`) ||
-                        g.syncState === "syncing"
-                      }
-                      onClick={() =>
-                        run(
-                          `upload:${g.id}`,
-                          () => uploadGameSave(g.id),
-                          `Save hry „${g.name}“ nahraný na cloud.`,
-                        )
-                      }
-                    >
-                      <UploadIcon className="h-3.5 w-3.5" />
-                      {g.syncState === "error"
-                        ? "Znova"
-                        : g.syncState === "syncing"
-                          ? "Prebieha…"
-                          : g.syncState === "synced"
-                            ? "Znova"
-                            : "Nahrať"}
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
+        <section className="games-library" aria-label="Knižnica hier">
+          <div className="games-library__heading">
+            Tvoja knižnica <span>{games.length}</span>
+          </div>
+          <div className={`games-library__cards ${viewMode === "list" ? "games-library__cards--list" : ""}`}>
+            {games.map((game) => (
+              <GameCard
+                key={game.id}
+                game={game}
+                cloudStatus={cloudStatuses[game.id]}
+                busy={busy}
+                globalAutoUpload={config.settings.autoUploadSaves}
+                onOpenFolder={() => void handleOpenFolder(game)}
+                onEdit={() => setEditGame(game)}
+                onRemove={() => setToRemove(game)}
+                onVersions={() => setVersionsGame(game)}
+                onAutoUpload={(value) => void run(
+                  `auto:${game.id}`, () => setGameAutoUpload(game.id, value),
+                )}
+                onBackup={() => void run(
+                  `local:${game.id}`, () => backupGameLocal(game.id),
+                  "Lokálna záloha save je overená.",
+                )}
+                onUpload={() => void run(
+                  `upload:${game.id}`, () => uploadGameSave(game.id),
+                  `Save hry „${game.name}“ nahraný na cloud.`,
+                )}
+              />
+            ))}
+          </div>
+        </section>
       )}
 
       {addOpen && <AddGameModal onClose={() => setAddOpen(false)} />}
 
-      {editGame && <EditGameModal game={editGame} onClose={() => setEditGame(null)} />}
+      {editGame && <EditGameModal
+        game={config.games.find((game) => game.id === editGame.id) ?? editGame}
+        onClose={() => setEditGame(null)}
+      />}
 
       {cloudProvider && (
         <CloudGamesModal

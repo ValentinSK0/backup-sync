@@ -74,8 +74,9 @@ pub fn unzip_to(archive: &Path, dest: &Path) -> Result<(), String> {
     let mut total = 0u64;
     for index in 0..zip.len() {
         let entry = zip.by_index(index).map_err(|e| e.to_string())?;
+        let name = entry.name().map_err(|e| e.to_string())?;
         if entry.enclosed_name().is_none() {
-            return Err(format!("ZIP obsahuje nebezpečnú cestu: {}", entry.name()));
+            return Err(format!("ZIP obsahuje nebezpečnú cestu: {name}"));
         }
         total = total
             .checked_add(entry.size())
