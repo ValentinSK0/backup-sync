@@ -67,6 +67,8 @@ Lokálne ZIPy sa ukladajú do podpriečinka `<názov hry>-<ID>` vo vybranom prie
 
 **Verzie** obsahujú cloudové verzie; lokálny save sa v nich objaví až po úspešnom nahratí. **Zálohovať lokálne** skontroluje save a uloží ZIP bez nahrávania. Stav synchronizácie vychádza z obsahu poslednej úspešne nahratej alebo obnovenej verzie.
 
+Keď cloud obsahuje novší save, priamo na kartičke sa zobrazí **Stiahnuť najnovšiu verziu**. Po potvrdení aplikácia znovu načíta cloudové verzie, vyberie najnovšiu a obnoví ju; aktuálny save najprv ochranne zazálohuje. Pred obnovou ukonči hru. História **Verzie** zostáva dostupná pre návrat k starším zálohám a zobrazuje najnovšie verzie navrchu. Ak cloud neposkytne dátum, aplikácia použije čas uložený v názve ZIPu; staré názvy neobsahujú časové pásmo, preto sa interpretujú v miestnom pásme počítača.
+
 Staršie záznamy nemajú obsahový odtlačok cloudovej verzie. Po aktualizácii preto vznikne lokálna záloha, ale pred prvým automatickým nahratím treba overiť správny save a raz použiť **Nahrať na cloud**. Pri obnove alebo napojení z cloudu sa odtlačok načíta z obnovenej zálohy. Symbolické odkazy v save priečinku sa do ZIPu nezahŕňajú.
 
 ## Prenos priečinka na iný PC
@@ -115,7 +117,7 @@ Aplikácia používa PKCE, kontrolu OAuth `state` a iba scope `drive.file`. Clie
 
 Pre verejný release musí byť OAuth consent screen v Google Cloud nastavený na **In production**. V režime **Testing** fungujú iba testovací používatelia a refresh token môže po siedmich dňoch vypršať.
 
-## Dôležité limity v0.5.0
+## Dôležité limity v0.5.1
 
 - Stav **Aktualizácia!** porovnáva najnovšiu cloud verziu s poslednou známou verziou hry. Konflikt zmien z dvoch PC aplikácia automaticky nerieši; smer operácie vyberá používateľ.
 - Priečinková záloha prepíše súbor s rovnakou cestou, ale nemaže súbory, ktoré zostali iba na cloude. Obnova prepíše rovnaké lokálne súbory a ostatné lokálne súbory ponechá.

@@ -374,6 +374,12 @@ pub async fn list_game_cloud_statuses(app: AppHandle) -> CmdResult<Vec<sync::Gam
 }
 
 #[tauri::command]
+pub async fn restore_latest_game_version(app: AppHandle, id: String) -> CmdResult<AppConfig> {
+    sync::restore_latest_game_version(&app, &id).await?;
+    Ok(sync::snapshot(&app).await)
+}
+
+#[tauri::command]
 pub async fn restore_game_version(app: AppHandle, id: String, version_id: String) -> CmdResult<()> {
     sync::restore_game_version(&app, &id, &version_id).await
 }

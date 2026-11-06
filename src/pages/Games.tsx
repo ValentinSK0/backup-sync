@@ -10,6 +10,7 @@ import {
   pickFolder,
   removeGame,
   restoreGameVersion,
+  restoreLatestGameVersion,
   setGameAutoUpload,
   updateGame,
   uploadGameSave,
@@ -111,7 +112,7 @@ function VersionsModal({ game, onClose }: { game: Game; onClose: () => void }) {
           </p>
         ) : (
           <div className="divide-y divide-zinc-800">
-            {versions.map((v) => (
+            {versions.map((v, index) => (
               <div key={v.id} className="flex items-center gap-3 py-3">
                 <HistoryIcon className="h-4.5 w-4.5 shrink-0 text-zinc-500" />
                 <div className="min-w-0 flex-1">
@@ -119,11 +120,12 @@ function VersionsModal({ game, onClose }: { game: Game; onClose: () => void }) {
                     className="truncate font-mono text-sm text-zinc-200"
                     title={v.name}
                   >
-                    {v.name}
+                    {v.createdAt ? formatDate(v.createdAt) : v.name}
+                    {index === 0 && v.createdAt && (
+                      <span className="ml-2 font-sans text-xs text-sky-400">Najnovšia</span>
+                    )}
                   </div>
                   <div className="text-xs text-zinc-500">
-                    {formatDate(v.createdAt)}
-                    <span className="text-zinc-700"> · </span>
                     {formatBytes(v.sizeBytes)}
                   </div>
                 </div>
@@ -705,6 +707,8 @@ export default function Games() {
   const [toRemove, setToRemove] = useState<Game | null>(null);
   const [editGame, setEditGame] = useState<Game | null>(null);
   const [versionsGame, setVersionsGame] = useState<Game | null>(null);
+  const [downloadGame, setDownloadGame] = useState<Game | null>(null);
+  const [cloudRefresh, setCloudRefresh] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
   const [cloudProvider, setCloudProvider] = useState<Provider | null>(null);
   const [cloudStatuses, setCloudStatuses] = useState<
@@ -755,7 +759,25 @@ export default function Games() {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [cloudStatusKey]);
+  }, [cloudStatusKey, cloudRefresh]);
+
+  async function handleDownloadLatest() {
+    if (!downloadGame || busy !== null) return;
+    const ok = await run(
+      `download:${downloadGame.id}`,
+      () => restoreLatestGameVersion(downloadGame.id),
+      `Najnovší save hry „${downloadGame.name}“ bol stiahnutý a obnovený.`,
+    );
+    setCloudRefresh((value) => value + 1);
+    if (ok) {
+      setCloudStatuses((statuses) => {
+        const next = { ...statuses };
+        delete next[downloadGame.id];
+        return next;
+      });
+      setDownloadGame(null);
+    }
+  }
 
   async function handleOpenFolder(game: Game) {
     try {
@@ -848,6 +870,7 @@ export default function Games() {
                 onEdit={() => setEditGame(game)}
                 onRemove={() => setToRemove(game)}
                 onVersions={() => setVersionsGame(game)}
+                onDownloadLatest={() => setDownloadGame(game)}
                 onAutoUpload={(value) => void run(
                   `auto:${game.id}`, () => setGameAutoUpload(game.id, value),
                 )}
@@ -893,6 +916,17 @@ export default function Games() {
           loading={busy === `remove:${toRemove.id}`}
           onConfirm={handleRemove}
           onCancel={() => setToRemove(null)}
+        />
+      )}
+
+      {downloadGame && (
+        <ConfirmDialog
+          title={`Stiahnuť najnovší save — ${downloadGame.name}`}
+          message="Najnovšia cloudová záloha nahradí save na tomto počítači. Aktuálny save sa najprv bezpečne zazálohuje. Pred pokračovaním ukonči hru."
+          confirmLabel="Stiahnuť a obnoviť"
+          loading={busy !== null}
+          onConfirm={() => void handleDownloadLatest()}
+          onCancel={() => setDownloadGame(null)}
         />
       )}
     </div>

@@ -139,6 +139,7 @@ pub fn run() {
             commands::list_game_versions,
             commands::list_game_cloud_statuses,
             commands::restore_game_version,
+            commands::restore_latest_game_version,
             commands::list_game_backups,
             commands::connect_game_backup,
             commands::open_local_folder,

@@ -1217,6 +1217,52 @@ async fn sync_game_save(app: &AppHandle, id: &str, action: GameSaveAction) -> Re
     result
 }
 
+// Older providers may omit creation dates. Our ZIP names contain local wall time.
+fn game_version_date(file: &RemoteFile) -> Option<chrono::DateTime<chrono::FixedOffset>> {
+    use chrono::TimeZone;
+    if let Some(date) = file
+        .created_at
+        .as_deref()
+        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+    {
+        return Some(date);
+    }
+    let stem = file.name.get(..file.name.len().checked_sub(4)?)?;
+    let stem = match stem.rsplit_once('_') {
+        Some((prefix, suffix)) if uuid::Uuid::parse_str(suffix).is_ok() => prefix,
+        _ => stem,
+    };
+    for (length, format) in [(23, "%Y-%m-%d_%H-%M-%S-%3f"), (19, "%Y-%m-%d_%H-%M-%S")] {
+        let Some(stamp) = stem
+            .len()
+            .checked_sub(length)
+            .and_then(|start| stem.get(start..))
+        else {
+            continue;
+        };
+        if let Ok(date) = chrono::NaiveDateTime::parse_from_str(stamp, format) {
+            return chrono::Local
+                .from_local_datetime(&date)
+                .earliest()
+                .map(|date| date.fixed_offset());
+        }
+    }
+    None
+}
+
+fn sorted_game_versions(files: Vec<RemoteFile>) -> Vec<RemoteFile> {
+    let mut files: Vec<_> = files
+        .into_iter()
+        .filter(|file| file.name.to_lowercase().ends_with(".zip"))
+        .map(|mut file| {
+            file.created_at = game_version_date(&file).map(|date| date.to_rfc3339());
+            file
+        })
+        .collect();
+    files.sort_by_cached_key(|file| (std::cmp::Reverse(game_version_date(file)), file.id.clone()));
+    files
+}
+
 /// Zoznam verzií save-ov hry na cloude (najnovšie prvé).
 pub async fn list_game_versions(app: &AppHandle, id: &str) -> Result<Vec<RemoteFile>, String> {
     let cfg = snapshot(app).await;
@@ -1227,10 +1273,9 @@ pub async fn list_game_versions(app: &AppHandle, id: &str) -> Result<Vec<RemoteF
         .cloned()
         .ok_or_else(|| "Hra sa nenašla.".to_string())?;
     let storage = make_provider(game.provider, &cfg)?;
-    let mut files = storage.list_files(&game_remote_dir_for(&game)).await?;
-    files.retain(|f| f.name.to_lowercase().ends_with(".zip"));
-    files.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-    Ok(files)
+    Ok(sorted_game_versions(
+        storage.list_files(&game_remote_dir_for(&game)).await?,
+    ))
 }
 
 fn remote_game_version_is_newer(game: &crate::config::Game, latest: &RemoteFile) -> bool {
@@ -1245,7 +1290,8 @@ fn remote_game_version_is_newer(game: &crate::config::Game, latest: &RemoteFile)
                 .zip(local)
                 .is_none_or(|(remote, local)| remote > local + chrono::Duration::seconds(5))
         }
-        _ => true,
+        (Some(_), None) => true,
+        _ => false,
     }
 }
 
@@ -1257,10 +1303,7 @@ pub async fn list_game_cloud_statuses(app: &AppHandle) -> Result<Vec<GameCloudSt
     for game in &cfg.games {
         let latest = match make_provider(game.provider, &cfg) {
             Ok(storage) => match storage.list_files(&game_remote_dir_for(game)).await {
-                Ok(files) => files
-                    .into_iter()
-                    .filter(|file| file.name.to_lowercase().ends_with(".zip"))
-                    .max_by(|a, b| a.created_at.cmp(&b.created_at)),
+                Ok(files) => sorted_game_versions(files).into_iter().next(),
                 Err(_) => None,
             },
             Err(_) => None,
@@ -1275,6 +1318,31 @@ pub async fn list_game_cloud_statuses(app: &AppHandle) -> Result<Vec<GameCloudSt
         });
     }
     Ok(statuses)
+}
+
+/// Refresh the cloud listing at click time; reuse the protected restore path.
+pub async fn restore_latest_game_version(app: &AppHandle, id: &str) -> Result<(), String> {
+    let latest = list_game_versions(app, id)
+        .await?
+        .into_iter()
+        .next()
+        .ok_or_else(|| "Na cloude nie je žiadna záloha tejto hry.".to_string())?;
+    if latest.created_at.is_none() {
+        return Err("Dátum najnovšej zálohy sa nedá určiť. Vyber ju cez Verzie.".into());
+    }
+    let cfg = snapshot(app).await;
+    let game = cfg
+        .games
+        .iter()
+        .find(|game| game.id == id)
+        .ok_or_else(|| "Hra sa nenašla.".to_string())?;
+    if !remote_game_version_is_newer(game, &latest) {
+        return Err(
+            "Cloud už neobsahuje novšiu verziu. Stav hry sa aktualizuje pri ďalšej kontrole."
+                .into(),
+        );
+    }
+    restore_game_version(app, id, &latest.id).await
 }
 
 /// Stiahne zvolenú verziu a rozbalí ju do save priečinka.
@@ -1556,6 +1624,70 @@ pub async fn connect_game_backup(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn version(id: &str, name: &str, date: Option<&str>) -> RemoteFile {
+        RemoteFile {
+            id: id.into(),
+            name: name.into(),
+            created_at: date.map(str::to_string),
+            size_bytes: 1,
+        }
+    }
+
+    #[test]
+    fn cloud_versions_without_dates_use_zip_timestamps_including_uuid_suffix() {
+        let files = sorted_game_versions(vec![
+            version("old", "Stardew-Valley_2026-09-12_10-01-37-888.zip", None),
+            version("unknown", "unknown.zip", None),
+            version(
+                "new",
+                "Stardew-Valley_2026-09-15_12-50-10-658_550e8400-e29b-41d4-a716-446655440000.zip",
+                None,
+            ),
+            version("ignore", "notes.txt", Some("2027-01-01T00:00:00Z")),
+            version(
+                "middle",
+                "Stardew-Valley_2026-09-13_20-14-07-810.zip",
+                Some("invalid"),
+            ),
+        ]);
+        assert_eq!(
+            files
+                .iter()
+                .map(|file| file.id.as_str())
+                .collect::<Vec<_>>(),
+            ["new", "middle", "old", "unknown"]
+        );
+        assert!(files[0].created_at.is_some());
+        assert!(files[3].created_at.is_none());
+    }
+
+    #[test]
+    fn cloud_versions_compare_instants_not_iso_text_or_file_names() {
+        let files = sorted_game_versions(vec![
+            version(
+                "old",
+                "save_2027-01-01_00-00-00-000.zip",
+                Some("2026-09-15T12:00:00+02:00"),
+            ),
+            version("new", "save.zip", Some("2026-09-15T11:00:00Z")),
+        ]);
+        assert_eq!(files[0].id, "new");
+    }
+
+    #[test]
+    fn latest_cloud_version_is_not_offered_again_after_restore() {
+        let mut game = test_game();
+        let latest = version("latest", "save.zip", Some("2026-11-06T12:00:00Z"));
+        game.last_upload = Some("2026-11-05T12:00:00Z".into());
+        assert!(remote_game_version_is_newer(&game, &latest));
+        game.last_cloud_version_id = Some(latest.id.clone());
+        assert!(!remote_game_version_is_newer(&game, &latest));
+        assert!(!remote_game_version_is_newer(
+            &test_game(),
+            &version("unknown", "unknown.zip", None)
+        ));
+    }
 
     fn test_game() -> crate::config::Game {
         serde_json::from_value(serde_json::json!({

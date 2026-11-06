@@ -177,6 +177,10 @@ export function restoreGameVersion(
   return invoke<null>("restore_game_version", { id, versionId });
 }
 
+export function restoreLatestGameVersion(id: string): Promise<AppConfig> {
+  return invoke<AppConfig>("restore_latest_game_version", { id });
+}
+
 /** Otvorí sledovaný priečinok (save hry / zálohovaný priečinok) v prieskumníkovi. */
 export function openLocalFolder(path: string): Promise<null> {
   return invoke<null>("open_local_folder", { path });

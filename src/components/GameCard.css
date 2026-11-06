@@ -390,14 +390,10 @@
   background: #fbbf240b;
   color: #f9cf83;
   font-size: 11px;
-  cursor: pointer;
 }
 .game-card__update > span:first-of-type {
   flex: 1;
   text-align: left;
-}
-.game-card__update:hover {
-  background: #fbbf2418;
 }
 .game-card__notice,
 .game-card__error {

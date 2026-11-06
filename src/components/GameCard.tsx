@@ -25,6 +25,7 @@ interface GameCardProps {
   onEdit: () => void;
   onRemove: () => void;
   onVersions: () => void;
+  onDownloadLatest: () => void;
   onBackup: () => void;
   onUpload: () => void;
   onAutoUpload: (value: boolean | null) => void;
@@ -46,6 +47,7 @@ export default function GameCard({
   onEdit,
   onRemove,
   onVersions,
+  onDownloadLatest,
   onBackup,
   onUpload,
   onAutoUpload,
@@ -55,6 +57,9 @@ export default function GameCard({
   const showImage = src && src !== failedImage;
   const imageSource = game.artwork?.source === "steam" ? "Steam" : "SteamGridDB";
   const syncing = game.syncState === "syncing";
+  const downloading = busy === `download:${game.id}`;
+  const updateAvailable = Boolean(cloudStatus?.updateAvailable);
+  const cloudDate = updateAvailable ? cloudStatus?.latestAt : game.lastUpload;
   const uploading = busy === `upload:${game.id}` || syncing;
   const waitingBackup = Boolean(
     game.local.backupHash &&
@@ -131,22 +136,21 @@ export default function GameCard({
           <h2 id={titleId} className="game-card__title" title={game.name}>
             {game.name}
           </h2>
-          <StateBadge state={game.syncState} />
+          {updateAvailable && !syncing ? (
+            <span className="game-card__warning">Novšia verzia na cloude</span>
+          ) : <StateBadge state={game.syncState} />}
         </div>
       </div>
 
       <div className="game-card__content">
         {cloudStatus?.updateAvailable && (
-          <button
+          <div
             className="game-card__update"
-            type="button"
-            onClick={onVersions}
-            title={`Cloud má novšiu verziu z ${formatDate(cloudStatus.latestAt)}. Otvor Verzie a obnov ju.`}
+            role="status"
           >
             <DownloadIcon className="h-4 w-4 shrink-0" />
-            <span>Novšia verzia na cloude</span>
-            <span aria-hidden="true">↗</span>
-          </button>
+            <span>Nová cloudová záloha · {formatDate(cloudStatus.latestAt)}</span>
+          </div>
         )}
 
         <dl className="game-card__backups">
@@ -172,8 +176,8 @@ export default function GameCard({
               <CloudIcon className="h-3.5 w-3.5" /> Cloudová záloha
             </dt>
             <dd>
-              {game.lastUpload
-                ? formatDate(game.lastUpload)
+              {cloudDate
+                ? formatDate(cloudDate)
                 : "Zatiaľ nenahrané"}
             </dd>
             <span
@@ -249,7 +253,18 @@ export default function GameCard({
         </div>
 
         <div className="game-card__actions">
-          <Button
+          {updateAvailable || downloading ? (
+            <Button
+              variant="primary"
+              className="game-card__upload"
+              loading={downloading}
+              disabled={busy !== null || syncing}
+              onClick={onDownloadLatest}
+            >
+              {!downloading && <DownloadIcon className="h-4 w-4" />}
+              {downloading ? "Sťahuje sa…" : "Stiahnuť najnovšiu verziu"}
+            </Button>
+          ) : <Button
             variant="primary"
             className="game-card__upload"
             loading={uploading}
@@ -264,7 +279,7 @@ export default function GameCard({
                 : game.syncState === "synced"
                   ? "Nahrať znova"
                   : "Nahrať na cloud"}
-          </Button>
+          </Button>}
           <div className="game-card__secondary-actions">
             <Button
               variant="ghost"

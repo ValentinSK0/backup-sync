@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.1 — 2026-11-06
+
+- Tlačidlo „Stiahnuť najnovšiu verziu“ priamo na kartičke hry, keď cloud obsahuje novší save.
+- Pred obnovou sa znovu načítajú cloudové verzie a aktuálny lokálny save sa ochranne zazálohuje.
+- História zobrazuje čitateľné dátumy, najnovšie zálohy navrchu a označenie „Najnovšia“.
+- Pri chýbajúcom dátume z cloudu sa použije čas v názve ZIPu vrátane starších názvov a názvov s UUID.
+- Dátumy s rôznymi časovými pásmami sa porovnávajú podľa skutočného času.
+- Opravné aktualizácie vývojových závislostí vrátane Vite.
+
 ## 0.5.0 — 2026-11-06
 
 - Nový dizajn herných kartičiek v mriežke aj zozname s prehľadnejšími stavmi záloh.
