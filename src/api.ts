@@ -2,7 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type {
   AppConfig,
-  ArtworkGame,
+  ArtworkSearchResult,
+  ArtworkSource,
   ArtworkImage,
   CloudFolderBackup,
   CloudGameBackup,
@@ -16,16 +17,17 @@ export function getConfig(): Promise<AppConfig> {
   return invoke<AppConfig>("get_config");
 }
 
-export function searchArtworkGames(query: string): Promise<ArtworkGame[]> {
-  return invoke<ArtworkGame[]>("search_artwork_games", { query });
+export function searchArtworkGames(query: string): Promise<ArtworkSearchResult> {
+  return invoke<ArtworkSearchResult>("search_artwork_games", { query });
 }
 
 export function listArtworkImages(
   gameId: number,
   kind: "grid" | "hero",
   page: number,
+  source: ArtworkSource = "steam",
 ): Promise<ArtworkImage[]> {
-  return invoke<ArtworkImage[]>("list_artwork_images", { gameId, kind, page });
+  return invoke<ArtworkImage[]>("list_artwork_images", { gameId, kind, page, source });
 }
 
 export function loadGameArtwork(
@@ -41,6 +43,7 @@ export function selectGameArtwork(
   kind: "grid" | "hero",
   page: number,
   imageId: number,
+  source: ArtworkSource = "steam",
 ): Promise<AppConfig> {
   return invoke<AppConfig>("select_game_artwork", {
     id,
@@ -48,6 +51,7 @@ export function selectGameArtwork(
     kind,
     page,
     imageId,
+    source,
   });
 }
 

@@ -9,6 +9,9 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 
+mod wikipedia;
+use wikipedia::WikipediaClient;
+
 const API_BASE: &str = "https://store.steampowered.com/api/";
 const MAX_IMAGE_BYTES: usize = 8 * 1024 * 1024;
 const PAGE_SIZE: usize = 50;
@@ -18,12 +21,39 @@ pub struct ArtworkService {
     operation: tokio::sync::Mutex<()>,
     retry_after: Mutex<Option<Instant>>,
     details: Mutex<HashMap<u64, (Instant, StoreGameDetails)>>,
+    wikipedia_retry_after: Mutex<Option<Instant>>,
+    wikipedia_pages: Mutex<HashMap<u64, (Instant, wikipedia::WikipediaPage)>>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ArtworkSource {
+    #[default]
+    Steam,
+    Wikipedia,
+}
+
+impl ArtworkSource {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Steam => "steam",
+            Self::Wikipedia => "wikipedia",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ArtworkGame {
     pub id: u64,
     pub name: String,
+    #[serde(default)]
+    pub source: ArtworkSource,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ArtworkSearchResult {
+    games: Vec<ArtworkGame>,
+    warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -139,9 +169,7 @@ impl<'a> StoreClient<'a> {
 
     async fn search(&self, name: &str) -> Result<Vec<ArtworkGame>, String> {
         let name = name.trim();
-        if name.is_empty() || name.chars().count() > 200 {
-            return Err("Zadaj názov hry od 1 do 200 znakov.".into());
-        }
+        validate_query(name)?;
         let mut result: StoreSearch = self
             .get(
                 "storesearch/",
@@ -180,6 +208,7 @@ impl<'a> StoreClient<'a> {
         Ok(details)
     }
 
+    #[cfg(test)]
     async fn images(&self, id: u64, kind: &str, page: u32) -> Result<Vec<ArtworkImage>, String> {
         let details = self.details(id).await?;
         images_from_details(&details, kind, page)
@@ -248,9 +277,13 @@ fn http_client() -> Result<reqwest::Client, String> {
         .connect_timeout(Duration::from_secs(8))
         .timeout(Duration::from_secs(25))
         .redirect(reqwest::redirect::Policy::none())
-        .user_agent(concat!("BackupSync/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!(
+            "BackupSync/",
+            env!("CARGO_PKG_VERSION"),
+            " (https://github.com/ValentinSK0/backup-sync)"
+        ))
         .build()
-        .map_err(|_| "Nepodarilo sa pripraviť pripojenie k Steam.".into())
+        .map_err(|_| "Nepodarilo sa pripraviť pripojenie ku katalógu obrázkov.".into())
 }
 
 fn valid_media_url(value: &str) -> bool {
@@ -258,7 +291,8 @@ fn valid_media_url(value: &str) -> bool {
         let host = url.host_str().unwrap_or_default();
         let trusted = host.ends_with(".steamstatic.com")
             || host == "steamcdn-a.akamaihd.net"
-            || host == "cdn2.steamgriddb.com";
+            || host == "cdn2.steamgriddb.com"
+            || host == "upload.wikimedia.org";
         url.scheme() == "https"
             && trusted
             && url.port().is_none()
@@ -272,16 +306,16 @@ async fn limited_body(mut response: reqwest::Response, limit: usize) -> Result<V
         .content_length()
         .is_some_and(|size| size > limit as u64)
     {
-        return Err("Odpoveď Steam prekračuje povolenú veľkosť.".into());
+        return Err("Odpoveď servera prekračuje povolenú veľkosť.".into());
     }
     let mut bytes = Vec::new();
     while let Some(chunk) = response
         .chunk()
         .await
-        .map_err(|_| "Sťahovanie zo Steam bolo prerušené.".to_string())?
+        .map_err(|_| "Sťahovanie zo servera bolo prerušené.".to_string())?
     {
         if bytes.len() + chunk.len() > limit {
-            return Err("Odpoveď Steam prekračuje povolenú veľkosť.".into());
+            return Err("Odpoveď servera prekračuje povolenú veľkosť.".into());
         }
         bytes.extend_from_slice(&chunk);
     }
@@ -296,13 +330,13 @@ fn image_mime(bytes: &[u8]) -> Result<&'static str, String> {
     } else if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP") {
         Ok("image/webp")
     } else {
-        Err("Steam vrátil nepodporovaný obrázok.".into())
+        Err("Server vrátil nepodporovaný obrázok.".into())
     }
 }
 
 async fn cached_image(directory: &Path, url: &str) -> Result<String, String> {
     if !valid_media_url(url) {
-        return Err("Steam vrátil nepovolenú adresu obrázka.".into());
+        return Err("Katalóg vrátil nepovolenú adresu obrázka.".into());
     }
     let path = cache_path(directory, url);
     if let Some(cached) = read_cached_image(&path).await {
@@ -367,9 +401,13 @@ fn exact_match<'a>(games: &'a [ArtworkGame], name: &str) -> Option<&'a ArtworkGa
         }
     }
     let name = normalized_name(name);
-    let mut matches = games
-        .iter()
-        .filter(|game| normalized_name(&game.name) == name);
+    let mut matches = games.iter().filter(|game| {
+        let title = match game.source {
+            ArtworkSource::Steam => game.name.as_str(),
+            ArtworkSource::Wikipedia => wikipedia::matching_title(&game.name),
+        };
+        normalized_name(title) == name
+    });
     let first = matches.next()?;
     // Ambiguous titles (for example a remake and an original) need a manual selection.
     if matches.next().is_some() {
@@ -383,9 +421,64 @@ fn exact_match<'a>(games: &'a [ArtworkGame], name: &str) -> Option<&'a ArtworkGa
 pub async fn search_artwork_games(
     app: AppHandle,
     query: String,
-) -> Result<Vec<ArtworkGame>, String> {
+) -> Result<ArtworkSearchResult, String> {
     let state = app.state::<AppState>();
-    StoreClient::new(&state.artwork)?.search(&query).await
+    validate_query(&query)?;
+    let (steam, wikipedia) = tokio::join!(
+        search_source(&state.artwork, ArtworkSource::Steam, &query),
+        search_source(&state.artwork, ArtworkSource::Wikipedia, &query)
+    );
+    let mut games = Vec::new();
+    let mut warnings = Vec::new();
+    for result in [steam, wikipedia] {
+        match result {
+            Ok(found) => games.extend(found),
+            Err(error) => warnings.push(error),
+        }
+    }
+    if games.is_empty() && !warnings.is_empty() {
+        return Err(warnings.join(" "));
+    }
+    Ok(ArtworkSearchResult { games, warnings })
+}
+
+fn validate_query(name: &str) -> Result<(), String> {
+    if name.trim().is_empty() || name.chars().count() > 200 {
+        return Err("Zadaj názov hry od 1 do 200 znakov.".into());
+    }
+    Ok(())
+}
+
+async fn search_source(
+    service: &ArtworkService,
+    source: ArtworkSource,
+    query: &str,
+) -> Result<Vec<ArtworkGame>, String> {
+    match source {
+        ArtworkSource::Steam => StoreClient::new(service)?.search(query).await,
+        ArtworkSource::Wikipedia => WikipediaClient::new(service)?.search(query).await,
+    }
+}
+
+async fn catalogue_images(
+    service: &ArtworkService,
+    source: ArtworkSource,
+    game_id: u64,
+    kind: &str,
+    page: u32,
+) -> Result<(String, Vec<ArtworkImage>), String> {
+    match source {
+        ArtworkSource::Steam => {
+            let details = StoreClient::new(service)?.details(game_id).await?;
+            let images = images_from_details(&details, kind, page)?;
+            Ok((details.name, images))
+        }
+        ArtworkSource::Wikipedia => {
+            let details = WikipediaClient::new(service)?.details(game_id).await?;
+            let images = details.images(kind, page)?;
+            Ok((details.title, images))
+        }
+    }
 }
 
 #[tauri::command]
@@ -394,11 +487,72 @@ pub async fn list_artwork_images(
     game_id: u64,
     kind: String,
     page: u32,
+    source: Option<ArtworkSource>,
 ) -> Result<Vec<ArtworkImage>, String> {
     let state = app.state::<AppState>();
-    StoreClient::new(&state.artwork)?
-        .images(game_id, &kind, page)
-        .await
+    catalogue_images(
+        &state.artwork,
+        source.unwrap_or_default(),
+        game_id,
+        &kind,
+        page,
+    )
+    .await
+    .map(|(_, images)| images)
+}
+
+async fn automatic_artwork(
+    service: &ArtworkService,
+    directory: &Path,
+    name: &str,
+) -> Result<Option<(GameArtwork, String)>, String> {
+    let mut errors = Vec::new();
+    for source in [ArtworkSource::Steam, ArtworkSource::Wikipedia] {
+        let games = match search_source(service, source, name).await {
+            Ok(games) => games,
+            Err(error) => {
+                errors.push(error);
+                continue;
+            }
+        };
+        let Some(matched) = exact_match(&games, name) else {
+            continue;
+        };
+        for kind in ["grid", "hero"] {
+            let images = match catalogue_images(service, source, matched.id, kind, 0).await {
+                Ok((_, images)) => images,
+                Err(error) => {
+                    errors.push(error);
+                    break;
+                }
+            };
+            for image in images.into_iter().take(3) {
+                match cached_image(directory, &image.url).await {
+                    Ok(data) => {
+                        return Ok(Some((
+                            GameArtwork {
+                                source: source.as_str().into(),
+                                game_id: matched.id,
+                                game_name: matched.name.clone(),
+                                image_id: image.id,
+                                kind: kind.into(),
+                                url: image.url,
+                                author: image.author.name,
+                                selected_manually: false,
+                            },
+                            data,
+                        )));
+                    }
+                    Err(error) => errors.push(error),
+                }
+            }
+        }
+    }
+    if errors.is_empty() {
+        Ok(None)
+    } else {
+        Err(errors.join(" "))
+    }
 }
 
 #[tauri::command]
@@ -440,40 +594,11 @@ pub async fn load_game_artwork(
     if !automatic || game.artwork_checked_name.as_ref() == Some(&lookup) {
         return Ok(None);
     }
-    let client = StoreClient::new(&state.artwork)?;
-    let games = client.search(&game.name).await?;
-    let mut artwork = None;
-    let mut data_url = None;
-    if let Some(matched) = exact_match(&games, &game.name) {
-        let details = client.details(matched.id).await?;
-        let mut last_error = None;
-        'categories: for kind in ["grid", "hero"] {
-            for image in images_from_details(&details, kind, 0)?.into_iter().take(3) {
-                match cached_image(&state.state_dir(), &image.url).await {
-                    Ok(data) => {
-                        data_url = Some(data);
-                        artwork = Some(GameArtwork {
-                            source: "steam".into(),
-                            game_id: matched.id,
-                            game_name: matched.name.clone(),
-                            image_id: image.id,
-                            kind: kind.into(),
-                            url: image.url,
-                            author: image.author.name,
-                            selected_manually: false,
-                        });
-                        break 'categories;
-                    }
-                    Err(error) => last_error = Some(error),
-                }
-            }
-        }
-        if artwork.is_none() {
-            if let Some(error) = last_error {
-                return Err(error);
-            }
-        }
-    }
+    let resolved = automatic_artwork(&state.artwork, &state.state_dir(), &game.name).await?;
+    let (artwork, data_url) = match resolved {
+        Some((artwork, data)) => (Some(artwork), Some(data)),
+        None => (None, None),
+    };
     let mut applied = false;
     sync::with_config(&app, |config| {
         if let Some(current) = config.games.iter_mut().find(|current| current.id == id) {
@@ -496,6 +621,7 @@ pub async fn select_game_artwork(
     kind: String,
     page: u32,
     image_id: u64,
+    source: Option<ArtworkSource>,
 ) -> Result<AppConfig, String> {
     let state = app.state::<AppState>();
     let _guard = state.artwork.operation.lock().await;
@@ -507,8 +633,10 @@ pub async fn select_game_artwork(
     {
         return Err("Hra sa nenašla.".into());
     }
-    let details = StoreClient::new(&state.artwork)?.details(game_id).await?;
-    let image = images_from_details(&details, &kind, page)?
+    let source = source.unwrap_or_default();
+    let (game_name, images) =
+        catalogue_images(&state.artwork, source, game_id, &kind, page).await?;
+    let image = images
         .into_iter()
         .find(|image| image.id == image_id)
         .ok_or("Vybraný obrázok už nie je dostupný. Načítaj galériu znova.")?;
@@ -516,9 +644,9 @@ pub async fn select_game_artwork(
     sync::with_config(&app, |config| {
         if let Some(game) = config.games.iter_mut().find(|game| game.id == id) {
             game.artwork = Some(GameArtwork {
-                source: "steam".into(),
+                source: source.as_str().into(),
                 game_id,
-                game_name: details.name,
+                game_name,
                 image_id,
                 kind,
                 url: image.url,
@@ -549,7 +677,7 @@ mod tests {
     use super::*;
     use std::io::{Read, Write};
 
-    fn mock_api(
+    pub(super) fn mock_api(
         status: u16,
         headers: &str,
         body: &str,
@@ -578,7 +706,7 @@ mod tests {
         (base, worker)
     }
 
-    fn details_fixture() -> StoreGameDetails {
+    pub(super) fn details_fixture() -> StoreGameDetails {
         serde_json::from_value(serde_json::json!({
             "name": "Mafia: The Old Country",
             "header_image": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1941540/header.jpg",
@@ -624,14 +752,17 @@ mod tests {
             ArtworkGame {
                 id: 1,
                 name: "Mafia: The Old Country - Padrino Pack".into(),
+                source: ArtworkSource::Steam,
             },
             ArtworkGame {
                 id: 1941540,
                 name: "Mafia: The Old Country".into(),
+                source: ArtworkSource::Steam,
             },
             ArtworkGame {
                 id: 2,
                 name: "Portal 2".into(),
+                source: ArtworkSource::Steam,
             },
         ];
         assert_eq!(

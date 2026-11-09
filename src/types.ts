@@ -42,7 +42,7 @@ export interface Game {
 }
 
 export interface GameArtwork {
-  source: "steam" | "steamgriddb";
+  source: ArtworkSource | "steamgriddb";
   gameId: number;
   gameName: string;
   imageId: number;
@@ -52,9 +52,17 @@ export interface GameArtwork {
   selectedManually: boolean;
 }
 
+export type ArtworkSource = "steam" | "wikipedia";
+
 export interface ArtworkGame {
   id: number;
   name: string;
+  source: ArtworkSource;
+}
+
+export interface ArtworkSearchResult {
+  games: ArtworkGame[];
+  warnings: string[];
 }
 
 export interface ArtworkImage {

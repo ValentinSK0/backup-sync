@@ -1,4 +1,18 @@
-import type { Provider } from "./types";
+import type { GameArtwork, Provider } from "./types";
+
+export function artworkSourceLabel(source: GameArtwork["source"]): string {
+  return {
+    steam: "Steam",
+    wikipedia: "Wikipedia",
+    steamgriddb: "SteamGridDB",
+  }[source];
+}
+
+export function artworkCredit(artwork: GameArtwork): string {
+  const source = artworkSourceLabel(artwork.source);
+  const credit = artwork.author && artwork.author !== source ? artwork.author : artwork.gameName;
+  return credit ? `${source} · ${credit}` : source;
+}
 
 /** ISO-8601 → "16. 7. 2026 14:30" (sk-SK). Null/neplatný dátum → "—". */
 export function formatDate(iso: string | null | undefined): string {

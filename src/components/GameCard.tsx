@@ -1,7 +1,7 @@
 import { useState, type CSSProperties } from "react";
 import { useGameArtwork } from "../artwork";
 import type { Game, GameCloudStatus } from "../types";
-import { formatDate, providerLabel } from "../format";
+import { artworkCredit, formatDate, providerLabel } from "../format";
 import { Button } from "./ui";
 import StateBadge from "./StateBadge";
 import {
@@ -55,7 +55,7 @@ export default function GameCard({
   const { src } = useGameArtwork(game, true);
   const [failedImage, setFailedImage] = useState<string | null>(null);
   const showImage = src && src !== failedImage;
-  const imageSource = game.artwork?.source === "steam" ? "Steam" : "SteamGridDB";
+  const imageCredit = game.artwork ? artworkCredit(game.artwork) : "";
   const syncing = game.syncState === "syncing";
   const downloading = busy === `download:${game.id}`;
   const updateAvailable = Boolean(cloudStatus?.updateAvailable);
@@ -125,12 +125,12 @@ export default function GameCard({
             className="game-card__eyebrow"
             title={
               showImage
-                ? `Obrázok zo ${imageSource} · ${game.artwork?.author || imageSource}`
+                ? `Obrázok · ${imageCredit}`
                 : undefined
             }
           >
             {showImage
-              ? `${imageSource}${game.artwork?.author ? ` · ${game.artwork.author}` : ""}`
+              ? imageCredit
               : "HERNÉ SAVE SÚBORY"}
           </span>
           <h2 id={titleId} className="game-card__title" title={game.name}>

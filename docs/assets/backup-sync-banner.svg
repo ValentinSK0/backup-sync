@@ -1,0 +1,196 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1280" height="440" viewBox="0 0 1280 440" role="img" aria-labelledby="title desc">
+  <title id="title">Backup Sync — animated GitHub project banner</title>
+  <desc id="desc">A midnight-blue banner with a violet Backup Sync wordmark, an animated cloud-upload logo, rotating sync rings and floating file cards.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B0E1D"/>
+      <stop offset=".52" stop-color="#101329"/>
+      <stop offset="1" stop-color="#090E1C"/>
+    </linearGradient>
+    <linearGradient id="purple" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#A99BFF"/>
+      <stop offset=".47" stop-color="#7958FB"/>
+      <stop offset="1" stop-color="#5531D8"/>
+    </linearGradient>
+    <linearGradient id="purpleText" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#B4A5FF"/>
+      <stop offset=".48" stop-color="#9B7BFF"/>
+      <stop offset="1" stop-color="#6CCAF5"/>
+    </linearGradient>
+    <linearGradient id="line" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#9169FC" stop-opacity=".07"/>
+      <stop offset=".45" stop-color="#AC8CFF" stop-opacity=".8"/>
+      <stop offset="1" stop-color="#4FBEEB" stop-opacity=".12"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#293052" stop-opacity=".95"/>
+      <stop offset="1" stop-color="#151A35" stop-opacity=".96"/>
+    </linearGradient>
+    <linearGradient id="outline" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7B72AB" stop-opacity=".55"/>
+      <stop offset=".5" stop-color="#5B6385" stop-opacity=".12"/>
+      <stop offset="1" stop-color="#68B8D7" stop-opacity=".3"/>
+    </linearGradient>
+    <radialGradient id="ambient">
+      <stop offset="0" stop-color="#7753FA" stop-opacity=".26"/>
+      <stop offset=".48" stop-color="#6345D8" stop-opacity=".1"/>
+      <stop offset="1" stop-color="#6345D8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="ambientBlue">
+      <stop offset="0" stop-color="#42BFEA" stop-opacity=".15"/>
+      <stop offset="1" stop-color="#42BFEA" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="tileShine" cx=".12" cy="0" r="1.3">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".28"/>
+      <stop offset=".55" stop-color="#FFFFFF" stop-opacity=".03"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="blur" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+    <filter id="glow" x="-90%" y="-90%" width="280%" height="280%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="softShadow" x="-60%" y="-60%" width="220%" height="220%">
+      <feDropShadow dx="0" dy="11" stdDeviation="16" flood-color="#020415" flood-opacity=".56"/>
+    </filter>
+    <pattern id="dots" width="23" height="23" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.1" fill="#A8AEED" fill-opacity=".12"/>
+    </pattern>
+    <clipPath id="frameClip"><rect width="1280" height="440" rx="29"/></clipPath>
+    <style><![CDATA[
+      .orbitA { transform-origin: 963px 218px; animation: rotateClock 34s linear infinite; }
+      .orbitB { transform-origin: 963px 218px; animation: rotateAnti 27s linear infinite; }
+      .floatA { animation: floatA 5.2s ease-in-out infinite; }
+      .floatB { animation: floatB 6.1s ease-in-out infinite; }
+      .pulse { transform-origin: 963px 216px; animation: breathe 4s ease-in-out infinite; }
+      .lift { animation: arrowLift 2.3s ease-in-out infinite; }
+      .sparkle1 { animation: blink 3.4s ease-in-out infinite; }
+      .sparkle2 { animation: blink 4.5s ease-in-out -1.7s infinite; }
+      .status { animation: statusPulse 2.6s ease-in-out infinite; }
+      .smallWave { animation: wavePulse 3.2s ease-in-out infinite; }
+      .smallWave.two { animation-delay: -1.1s; }
+      @keyframes rotateClock { to { transform: rotate(360deg); } }
+      @keyframes rotateAnti { to { transform: rotate(-360deg); } }
+      @keyframes floatA { 0%,100% {transform:translateY(0)} 50% {transform:translateY(-9px)} }
+      @keyframes floatB { 0%,100% {transform:translateY(0)} 50% {transform:translateY(9px)} }
+      @keyframes breathe { 0%,100% {opacity:.28;transform:scale(.94)} 50% {opacity:.56;transform:scale(1.08)} }
+      @keyframes arrowLift { 0%,100% {transform:translateY(3px)} 50% {transform:translateY(-5px)} }
+      @keyframes blink { 0%,100% {opacity:.24} 50% {opacity:1} }
+      @keyframes statusPulse { 0%,100% {opacity:.54} 50% {opacity:1} }
+      @keyframes wavePulse { 0%,100% {opacity:.13} 50% {opacity:.48} }
+      @media (prefers-reduced-motion:reduce) { * {animation:none !important} }
+    ]]></style>
+  </defs>
+
+  <g clip-path="url(#frameClip)">
+    <rect width="1280" height="440" fill="url(#background)"/>
+    <ellipse cx="933" cy="222" rx="368" ry="299" fill="url(#ambient)"/>
+    <ellipse cx="1188" cy="400" rx="286" ry="240" fill="url(#ambientBlue)"/>
+    <ellipse cx="130" cy="7" rx="240" ry="165" fill="url(#ambient)" opacity=".3"/>
+    <rect x="707" y="28" width="528" height="385" fill="url(#dots)" opacity=".6"/>
+    <path d="M0 386H1280" stroke="#B6B4EF" stroke-opacity=".06"/>
+    <path d="M669 0V440" stroke="#A6A8CC" stroke-opacity=".06"/>
+    <path d="M1181 0L1065 440M1235 0L1119 440" stroke="#B7B8F7" stroke-opacity=".034"/>
+
+    <!-- Brand and eyebrow. The logo resembles the user's purple cloud-upload app icon. -->
+    <g transform="translate(89 56)">
+      <rect width="47" height="47" rx="13" fill="url(#purple)"/>
+      <path d="M13 34h22c4.2 0 7.5-3.1 7.5-7.1 0-3.9-2.9-6.8-6.6-7.1C34.5 13 29.1 9 22.8 9 16.3 9 11.9 13.7 10.4 19.6 6.7 20.6 4.5 23.5 4.5 26.7 4.5 30.9 8 34 13 34Z" transform="translate(0 2)" fill="#fff" opacity=".97"/>
+      <path d="M23.3 16L16.6 24h4.5v9h4.8v-9h4.4Z" fill="#7150E9"/>
+    </g>
+    <text x="150" y="77" fill="#F3F3FF" font-family="Arial,Helvetica,sans-serif" font-size="16" font-weight="800" letter-spacing="2.3">BACKUP SYNC</text>
+    <text x="151" y="97" fill="#858BAF" font-family="Arial,Helvetica,sans-serif" font-size="10.8" font-weight="600" letter-spacing="2.2">DESKTOP APPLICATION</text>
+
+    <g font-family="Arial,Helvetica,sans-serif">
+      <text x="86" y="207" fill="#F6F7FF" font-size="79" font-weight="800" letter-spacing="-4.3">BACKUP</text>
+      <text x="88" y="284" fill="url(#purpleText)" font-size="83" font-weight="800" letter-spacing="-3.5">SYNC<tspan fill="#F5F5FF">.</tspan></text>
+      <text x="92" y="329" fill="#B1B6D0" font-size="17" font-weight="400" letter-spacing=".05">Your files, backed up. Your folders, in sync.</text>
+    </g>
+    <g transform="translate(91 361)">
+      <circle cx="7" cy="7" r="6.5" fill="#63E6B5" opacity=".16"/>
+      <circle class="status" cx="7" cy="7" r="3.25" fill="#6FF3C0"/>
+      <text x="23" y="11.4" fill="#8B93B8" font-family="Arial,Helvetica,sans-serif" font-size="12.5" font-weight="700" letter-spacing="1.5">BACKUP</text>
+      <circle cx="133" cy="7" r="2" fill="#575E80"/>
+      <text x="149" y="11.4" fill="#8B93B8" font-family="Arial,Helvetica,sans-serif" font-size="12.5" font-weight="700" letter-spacing="1.5">SYNC</text>
+      <circle cx="241" cy="7" r="2" fill="#575E80"/>
+      <text x="258" y="11.4" fill="#8B93B8" font-family="Arial,Helvetica,sans-serif" font-size="12.5" font-weight="700" letter-spacing="1.5">SIMPLIFY</text>
+    </g>
+
+    <!-- Sync illustration -->
+    <g class="pulse">
+      <circle cx="963" cy="218" r="142" fill="none" stroke="#8063FE" stroke-opacity=".22" stroke-width="16" filter="url(#blur)"/>
+    </g>
+    <circle cx="963" cy="218" r="152" fill="none" stroke="#A291FF" stroke-opacity=".1" stroke-width="1"/>
+    <circle cx="963" cy="218" r="115" fill="none" stroke="#BBB4FF" stroke-opacity=".09" stroke-width="1"/>
+    <g class="orbitA">
+      <circle cx="963" cy="218" r="152" fill="none" stroke="#9773FF" stroke-opacity=".62" stroke-width="2" stroke-linecap="round" stroke-dasharray="63 250 12 630"/>
+      <circle cx="963" cy="66" r="4" fill="#AB9FFF" filter="url(#glow)"/>
+    </g>
+    <g class="orbitB">
+      <circle cx="963" cy="218" r="117" fill="none" stroke="#65D1FF" stroke-opacity=".42" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="40 149 7 536"/>
+      <circle cx="963" cy="335" r="3.3" fill="#8FE4FB"/>
+    </g>
+    <g class="sparkle1" stroke="#A795FF" stroke-width="1.3" stroke-linecap="round">
+      <path d="M1160 116v15m-7.5-7.5h15"/>
+    </g>
+    <g class="sparkle2" stroke="#77C7F7" stroke-width="1.2" stroke-linecap="round">
+      <path d="M799 323v11m-5.5-5.5h11"/>
+    </g>
+    <circle cx="1161" cy="360" r="2" fill="#9D8BFA" opacity=".54"/>
+    <circle cx="825" cy="84" r="2" fill="#9D8BFA" opacity=".42"/>
+
+    <!-- Data travels toward and from the center; pure SVG SMIL, no JavaScript. -->
+    <path d="M820 205C852 205 859 211 892 211" fill="none" stroke="url(#line)" stroke-width="2" stroke-dasharray="4 8"/>
+    <path d="M1036 232C1069 232 1076 280 1101 285" fill="none" stroke="url(#line)" stroke-width="2" stroke-dasharray="4 8"/>
+    <circle r="4.5" fill="#A68CFF" filter="url(#glow)">
+      <animateMotion dur="3.3s" repeatCount="indefinite" path="M820 205C852 205 859 211 892 211"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.2;.78;1" dur="3.3s" repeatCount="indefinite"/>
+    </circle>
+    <circle r="3.3" fill="#85D9F8" filter="url(#glow)">
+      <animateMotion dur="3.3s" begin="-1.65s" repeatCount="indefinite" path="M1036 232C1069 232 1076 280 1101 285"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.2;.78;1" dur="3.3s" begin="-1.65s" repeatCount="indefinite"/>
+    </circle>
+
+    <!-- Local files card -->
+    <g transform="translate(713 159)"><g class="floatA">
+      <rect width="130" height="97" rx="19" fill="url(#glass)" stroke="#A69CF3" stroke-opacity=".28" filter="url(#softShadow)"/>
+      <rect x="16" y="16" width="37" height="38" rx="10" fill="#9C87FE" fill-opacity=".15"/>
+      <path d="M25 26h8l3.6 4H44v15H25z" fill="none" stroke="#B9A9FF" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M24.8 34h19" stroke="#B9A9FF" stroke-width="2"/>
+      <text x="63" y="32" fill="#E8E8FE" font-family="Arial,Helvetica,sans-serif" font-size="14" font-weight="700">Files</text>
+      <text x="63" y="47" fill="#8790BB" font-family="Arial,Helvetica,sans-serif" font-size="9.5" letter-spacing=".55">LOCAL</text>
+      <rect x="16" y="70" width="97" height="4" rx="2" fill="#353B61"/>
+      <rect x="16" y="70" width="64" height="4" rx="2" fill="#9075FC"/>
+      <circle cx="114" cy="72" r="3.4" fill="#7FDECD"/>
+    </g></g>
+
+    <!-- Central app tile -->
+    <circle cx="962" cy="218" r="100" fill="#7452F8" opacity=".1" filter="url(#blur)"/>
+    <g filter="url(#softShadow)">
+      <rect x="883" y="139" width="160" height="160" rx="42" fill="url(#purple)"/>
+      <rect x="883.7" y="139.7" width="158.6" height="158.6" rx="41" fill="url(#tileShine)" stroke="#D3C8FF" stroke-opacity=".44" stroke-width="1.4"/>
+    </g>
+    <g transform="translate(894 153)">
+      <path d="M36 108h65c13.5 0 23-9.7 23-22.2 0-11.9-8.8-21.3-20.6-22.2C99.2 44.7 84.7 33 67.5 33c-17.7 0-31.8 12.4-35.2 29.3C20.2 64.4 12 73.8 12 85.5 12 98.9 22.4 108 36 108z" fill="#fff"/>
+      <path class="lift" d="M68.3 47.2 47.5 73.1h12.6v24h16.4v-24h12.6Z" fill="#7353EB"/>
+    </g>
+    <path class="smallWave" d="M1062 189c12 7 18 17 18 30s-6 23-18 30" fill="none" stroke="#A99BFF" stroke-width="2" stroke-linecap="round"/>
+    <path class="smallWave two" d="M1071 178c17 11 26 25 26 41s-9 30-26 41" fill="none" stroke="#9B8DFF" stroke-width="1.6" stroke-linecap="round"/>
+
+    <!-- Cloud / synced card -->
+    <g transform="translate(1073 267)"><g class="floatB">
+      <rect width="151" height="92" rx="19" fill="url(#glass)" stroke="#81B7CF" stroke-opacity=".32" filter="url(#softShadow)"/>
+      <rect x="16" y="17" width="38" height="38" rx="12" fill="#70E2C0" fill-opacity=".13"/>
+      <path d="M24 36.5l7.2 7.2L45 29.7" fill="none" stroke="#6EEBC1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="65" y="34" fill="#EAFDF5" font-family="Arial,Helvetica,sans-serif" font-size="14" font-weight="700">In sync</text>
+      <text x="65" y="49.5" fill="#91A2B9" font-family="Arial,Helvetica,sans-serif" font-size="9.5" letter-spacing=".6">UP TO DATE</text>
+      <rect x="17" y="69" width="116" height="4" rx="2" fill="#354663"/>
+      <rect x="17" y="69" width="116" height="4" rx="2" fill="#68D6BD" opacity=".82"/>
+    </g></g>
+
+    <text x="1212" y="86" fill="#717BA6" font-family="Arial,Helvetica,sans-serif" font-size="10" font-weight="700" letter-spacing="2.2" text-anchor="end">01 / SYNC</text>
+  </g>
+  <rect x=".75" y=".75" width="1278.5" height="438.5" rx="28.25" fill="none" stroke="url(#outline)" stroke-width="1.5"/>
+</svg>

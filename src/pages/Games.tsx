@@ -39,7 +39,7 @@ import {
   labelCls,
 } from "../components/ui";
 import { useApp } from "../context";
-import { errMsg, formatBytes, formatDate, providerLabel } from "../format";
+import { artworkCredit, errMsg, formatBytes, formatDate, providerLabel } from "../format";
 import { useConfigAction } from "../hooks";
 import type {
   CloudGameBackup,
@@ -600,7 +600,7 @@ function EditGameModal({
             <div className="min-w-0">
               <p className="text-xs font-medium text-zinc-200">Obrázok kartičky</p>
               <p className="mt-1 truncate text-[11px] text-zinc-500">
-                {game.artwork ? `${game.artwork.source === "steam" ? "Steam" : "SteamGridDB"} · ${game.artwork.author || game.artwork.gameName}` : "Automatický výber podľa názvu hry"}
+                {game.artwork ? artworkCredit(game.artwork) : "Automatický výber podľa názvu hry"}
               </p>
             </div>
             <Button disabled={busy !== null} onClick={() => setArtworkOpen(true)}>Vybrať obrázok</Button>

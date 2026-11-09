@@ -1,3 +1,5 @@
+![Backup Sync – animovaný banner](docs/assets/backup-sync-banner.svg)
+
 # Backup Sync
 
 Windows aplikácia na ručné alebo automatické zálohovanie priečinkov a herných save súborov na Google Drive, Ulož.to Disk alebo vlastný cloud.
@@ -51,7 +53,7 @@ Nová záloha pripojená z cloudu má automatiku zámerne vypnutú, aby sa hneď
 
 ## Obrázky herných kartičiek
 
-Obrázky sa automaticky vyhľadajú podľa názvu hry vo verejnom katalógu Steam. Prihlasovanie ani API kľúč netreba. V nastaveniach kartičky klikni na **Vybrať obrázok** a vyber obal, pozadie alebo screenshot. Galéria sa načíta až po kliknutí. Vybraný obrázok sa uloží ku hre a lokálna cache umožní jeho zobrazenie aj bez internetu.
+Obrázky sa automaticky vyhľadajú podľa názvu hry vo verejnom katalógu Steam. Ak sa vhodný obrázok nenájde, aplikácia skúsi Wikipédiu aj pre hry mimo Steamu, napríklad StarCraft. Prihlasovanie ani API kľúč netreba. V nastaveniach kartičky klikni na **Vybrať obrázok**. Vyhľadávanie ponúkne hry z oboch zdrojov s označením zdroja. Steam poskytuje obaly, pozadia a screenshoty, Wikipedia hlavný obal článku. Galéria sa načíta až po kliknutí. Vybraný obrázok sa uloží ku hre a lokálna cache umožní jeho zobrazenie aj bez internetu.
 
 Pri nejasnej zhode vyhľadaj v galérii oficiálny názov hry a vyber správny výsledok.
 

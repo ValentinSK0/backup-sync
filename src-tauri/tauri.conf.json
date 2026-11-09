@@ -24,7 +24,7 @@
       "csp": {
         "default-src": "'self' customprotocol: asset:",
         "connect-src": "ipc: http://ipc.localhost",
-        "img-src": "'self' asset: http://asset.localhost blob: data: https://cdn2.steamgriddb.com https://*.steamstatic.com https://steamcdn-a.akamaihd.net",
+        "img-src": "'self' asset: http://asset.localhost blob: data: https://cdn2.steamgriddb.com https://*.steamstatic.com https://steamcdn-a.akamaihd.net https://upload.wikimedia.org",
         "style-src": "'self' 'unsafe-inline'",
         "script-src": "'self'"
       }
