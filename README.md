@@ -183,9 +183,10 @@ npm run build
 
 Live catalogue tests are ignored by default because they access external services. The project also includes backend tests for save snapshots, archive verification, version ordering, and provider behavior.
 
-Further technical details are available in the project documentation. Some supporting documents are currently in Slovak.
+Further technical details are available in the English documentation guides. Start with the [documentation index](docs/README.md).
 
 - [Game-save verification](docs/game-save-verification.md)
+- [Artwork providers](docs/artwork.md)
 - [IPC contract](docs/ipc-contract.md)
 - [Release checklist](docs/release-checklist.md)
 - [Security policy](.github/SECURITY.md)
