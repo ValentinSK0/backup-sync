@@ -3,7 +3,7 @@ use serde::Deserialize;
 use serde_json::json;
 use std::path::Path;
 use std::time::Duration;
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 pub const AUTH_TOKEN_KEY: &str = "ulozto_auth_token";
 pub const APP_TOKEN_KEY: &str = "ulozto_app_token";
@@ -39,9 +39,11 @@ pub async fn login(login: &str, auth_token: &str, app_token: &str) -> Result<Str
         let body = resp.text().await.unwrap_or_default();
         // 150001 = dočasná ochrana proti príliš častým prihláseniam
         if body.contains("150001") || body.contains("Try again later") {
-            return Err("Ulož.to dočasne blokuje prihlásenie (príliš veľa pokusov za sebou). \
+            return Err(
+                "Ulož.to dočasne blokuje prihlásenie (príliš veľa pokusov za sebou). \
                 Počkaj pár minút a skús znova — session sa potom uloží a už sa to nebude opakovať."
-                .into());
+                    .into(),
+            );
         }
         let brief: String = body.chars().take(220).collect();
         return Err(format!("Ulož.to zamietlo prihlásenie ({status}): {brief}"));
@@ -123,7 +125,9 @@ impl Ulozto {
                 let status = resp.status();
                 let text = resp.text().await.unwrap_or_default();
                 let brief: String = text.chars().take(300).collect();
-                return Err(format!("Ulož.to {method} {path} zlyhalo ({status}): {brief}"));
+                return Err(format!(
+                    "Ulož.to {method} {path} zlyhalo ({status}): {brief}"
+                ));
             }
             return Ok(resp);
         }
@@ -164,10 +168,7 @@ impl Ulozto {
             name: String,
             slug: String,
         }
-        let path = format!(
-            "/v9/user/{}/folder/{}/folder-list",
-            self.login, folder_slug
-        );
+        let path = format!("/v9/user/{}/folder/{}/folder-list", self.login, folder_slug);
         let list: FolderList = self
             .api_request(reqwest::Method::GET, &path, None)
             .await?
@@ -177,7 +178,10 @@ impl Ulozto {
         Ok(list
             .subfolders
             .into_iter()
-            .map(|s| RemoteFolder { id: s.slug, name: s.name })
+            .map(|s| RemoteFolder {
+                id: s.slug,
+                name: s.name,
+            })
             .collect())
     }
 
@@ -197,11 +201,18 @@ impl Ulozto {
             .json()
             .await
             .map_err(|e| format!("Neplatná odpoveď Ulož.to: {e}"))?;
-        Ok(RemoteFolder { id: created.slug, name: created.name })
+        Ok(RemoteFolder {
+            id: created.slug,
+            name: created.name,
+        })
     }
 
     /// Nájde alebo vytvorí zanorený priečinok podľa segmentov cesty od rootu.
-    async fn ensure_dir_from(&self, start_slug: &str, segments: &[String]) -> Result<RemoteFolder, String> {
+    async fn ensure_dir_from(
+        &self,
+        start_slug: &str,
+        segments: &[String],
+    ) -> Result<RemoteFolder, String> {
         let mut current = RemoteFolder {
             id: start_slug.to_string(),
             name: String::new(),
@@ -252,6 +263,29 @@ impl Ulozto {
                 size_bytes: i.filesize,
             })
             .collect())
+    }
+
+    async fn find_dir_from(
+        &self,
+        start_slug: &str,
+        segments: &[String],
+    ) -> Result<Option<RemoteFolder>, String> {
+        let mut current = RemoteFolder {
+            id: start_slug.to_string(),
+            name: String::new(),
+        };
+        for segment in segments {
+            let Some(folder) = self
+                .subfolders(&current.id)
+                .await?
+                .into_iter()
+                .find(|folder| folder.name == *segment)
+            else {
+                return Ok(None);
+            };
+            current = folder;
+        }
+        Ok(Some(current))
     }
 
     /// Nahrá jeden súbor cez resumable upload API a vráti slug súboru.
@@ -351,7 +385,9 @@ impl Ulozto {
                 }
             }
             if !uploaded {
-                return Err(format!("Blok {chunk_id} sa nepodarilo nahrať: {last_error}"));
+                return Err(format!(
+                    "Blok {chunk_id} sa nepodarilo nahrať: {last_error}"
+                ));
             }
             if filled < buffer.len() {
                 break;
@@ -441,7 +477,9 @@ impl StorageProvider for Ulozto {
 
     async fn list_folders(&self, dir: &[String]) -> Result<Vec<RemoteFolder>, String> {
         let root = self.root_folder_slug().await?;
-        let folder = self.ensure_dir_from(&root, dir).await?;
+        let Some(folder) = self.find_dir_from(&root, dir).await? else {
+            return Ok(Vec::new());
+        };
         self.subfolders(&folder.id).await
     }
 
@@ -488,7 +526,9 @@ impl StorageProvider for Ulozto {
 
     async fn list_files(&self, dir: &[String]) -> Result<Vec<RemoteFile>, String> {
         let root = self.root_folder_slug().await?;
-        let folder = self.ensure_dir_from(&root, dir).await?;
+        let Some(folder) = self.find_dir_from(&root, dir).await? else {
+            return Ok(Vec::new());
+        };
         self.files_in(&folder.id).await
     }
 
@@ -528,7 +568,7 @@ impl StorageProvider for Ulozto {
             format!("Ulož.to nevydalo odkaz na stiahnutie (skúšané fast/vipdata/free). Posledná chyba: {last_error}")
         })?;
 
-        let resp = self
+        let mut resp = self
             .http
             .get(&link)
             .timeout(Duration::from_secs(3600))
@@ -537,13 +577,17 @@ impl StorageProvider for Ulozto {
             .map_err(|e| format!("Stiahnutie zlyhalo: {e}"))?
             .error_for_status()
             .map_err(|e| format!("Ulož.to odmietlo stiahnutie: {e}"))?;
-        let bytes = resp
-            .bytes()
+        let mut file = tokio::fs::File::create(dest)
             .await
-            .map_err(|e| format!("Stiahnutie zlyhalo: {e}"))?;
-        tokio::fs::write(dest, &bytes)
+            .map_err(|e| e.to_string())?;
+        while let Some(chunk) = resp
+            .chunk()
             .await
-            .map_err(|e| e.to_string())
+            .map_err(|e| format!("Stiahnutie zlyhalo: {e}"))?
+        {
+            file.write_all(&chunk).await.map_err(|e| e.to_string())?;
+        }
+        file.flush().await.map_err(|e| e.to_string())
     }
 
     async fn delete_file(&self, file_id: &str) -> Result<(), String> {

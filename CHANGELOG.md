@@ -4,6 +4,19 @@ Changes are grouped by release. The Unreleased section describes work on `main` 
 
 ## Unreleased
 
+## 0.5.3 — 2026-11-09
+
+- Kept Google Drive and Ulož.to catalogue reads from creating missing cloud directories, and streamed Ulož.to downloads to disk.
+
+- Applied filename date fallback and chronological ordering when reconnecting cloud games, and compared newer saves with the restored cloud version when available.
+- Guarded cloud-backup connections and game or folder changes against concurrent transfers and app-update installation.
+- Accepted IPv6 loopback custom-cloud endpoints and aligned artwork image types with the backend payload.
+
+- Added automatic GitHub release checks at startup and every six hours, plus a Settings panel for checking, downloading, and installing app updates.
+- Added signed Windows updater artifacts, signed-version verification, release manifest generation, and installation exclusion while backups or restores are active.
+
+- Reduced Windows installer payload by embedding the small WebView2 bootstrapper and using zlib compression. Installing a missing WebView2 runtime requires internet access.
+
 - Added Wikipedia artwork lookup for games outside Steam, with automatic fallback and manual selection alongside Steam results.
 - Added source-specific catalogue IDs, separate provider caches and retry deadlines, and local image caching for the new artwork source.
 - Added an animated SVG banner to the README.

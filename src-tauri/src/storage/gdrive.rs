@@ -371,6 +371,17 @@ impl GDrive {
             .await
     }
 
+    async fn find_dir(&self, token: &str, segments: &[String]) -> Result<Option<String>, String> {
+        let mut parent = "root".to_string();
+        for segment in segments {
+            let Some(id) = self.find_in_parent(token, &parent, segment, true).await? else {
+                return Ok(None);
+            };
+            parent = id;
+        }
+        Ok(Some(parent))
+    }
+
     async fn list_children(&self, token: &str, parent: &str) -> Result<Vec<DriveItem>, String> {
         let q = format!("'{parent}' in parents and trashed = false");
         let mut page_token: Option<String> = None;
@@ -489,7 +500,9 @@ impl StorageProvider for GDrive {
 
     async fn list_folders(&self, dir: &[String]) -> Result<Vec<RemoteFolder>, String> {
         let token = self.token().await?;
-        let parent = self.ensure_dir(&token, dir).await?;
+        let Some(parent) = self.find_dir(&token, dir).await? else {
+            return Ok(Vec::new());
+        };
         let mut folders: Vec<RemoteFolder> = self
             .list_children(&token, &parent)
             .await?
@@ -547,7 +560,9 @@ impl StorageProvider for GDrive {
 
     async fn list_files(&self, dir: &[String]) -> Result<Vec<RemoteFile>, String> {
         let token = self.token().await?;
-        let folder_id = self.ensure_dir(&token, dir).await?;
+        let Some(folder_id) = self.find_dir(&token, dir).await? else {
+            return Ok(Vec::new());
+        };
         let mut files: Vec<RemoteFile> = self
             .list_children(&token, &folder_id)
             .await?

@@ -1,7 +1,6 @@
 use super::{http_client, RemoteFile, RemoteFolder, RemoteTreeFile, StorageProvider};
 use serde::Deserialize;
 use std::collections::BTreeSet;
-use std::net::IpAddr;
 use std::path::Path;
 use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
@@ -78,12 +77,11 @@ pub fn normalize_endpoint(endpoint: &str) -> Result<String, String> {
     }
 
     let secure = url.scheme() == "https";
-    let loopback = match url.host_str() {
-        Some("localhost") => true,
-        Some(host) => host
-            .parse::<IpAddr>()
-            .is_ok_and(|address| address.is_loopback()),
-        None => false,
+    let loopback = match url.host() {
+        Some(url::Host::Domain("localhost")) => true,
+        Some(url::Host::Ipv4(address)) => address.is_loopback(),
+        Some(url::Host::Ipv6(address)) => address.is_loopback(),
+        _ => false,
     };
     if !(secure || url.scheme() == "http" && loopback) {
         return Err(
@@ -222,11 +220,17 @@ impl StorageProvider for CustomCloud {
         let items = self.list_items(&prefix).await?;
         Ok(items
             .into_iter()
-            .map(|i| RemoteFile {
-                name: i.path.rsplit('/').next().unwrap_or(&i.path).to_string(),
-                id: i.path,
-                created_at: i.created_at,
-                size_bytes: i.size,
+            .filter_map(|i| {
+                let relative = i.path.strip_prefix(&prefix)?;
+                if relative.is_empty() || relative.contains('/') {
+                    return None;
+                }
+                Some(RemoteFile {
+                    name: i.path.rsplit('/').next().unwrap_or(&i.path).to_string(),
+                    id: i.path,
+                    created_at: i.created_at,
+                    size_bytes: i.size,
+                })
             })
             .collect())
     }
@@ -269,7 +273,7 @@ impl StorageProvider for CustomCloud {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_endpoint;
+    use super::*;
 
     #[test]
     fn custom_cloud_requires_https_except_loopback() {
@@ -280,6 +284,144 @@ mod tests {
         assert!(normalize_endpoint("http://cloud.example.com").is_err());
         assert!(normalize_endpoint("http://localhost:8080").is_ok());
         assert!(normalize_endpoint("http://127.0.0.1:8080").is_ok());
+        assert!(normalize_endpoint("http://[::1]:8080").is_ok());
+        assert!(normalize_endpoint("http://[2001:db8::1]:8080").is_err());
         assert!(normalize_endpoint("https://user:pass@example.com").is_err());
+    }
+
+    #[tokio::test]
+    async fn custom_cloud_round_trip_uses_encoded_paths_and_preserves_bytes() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = format!("http://{}", listener.local_addr().unwrap());
+        let data: Vec<u8> = (0..100_000).map(|index| (index % 251) as u8).collect();
+        let server_data = data.clone();
+        let file_id = "BackupSync/games/Test Game/save ?.zip";
+        let items = serde_json::json!([
+            {"path":file_id,"size":data.len(),"createdAt":"2026-11-09T12:00:00Z"},
+            {"path":"BackupSync/games/Test Game/nested/other.zip","size":1},
+            {"path":"unrelated/ignored.zip","size":1}
+        ])
+        .to_string();
+        let worker = std::thread::spawn(move || {
+            for index in 0..7 {
+                let (mut socket, _) = listener.accept().unwrap();
+                socket
+                    .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                    .unwrap();
+                let mut request = Vec::new();
+                let mut buffer = [0; 8192];
+                while !request.windows(4).any(|part| part == b"\r\n\r\n") {
+                    let count = socket.read(&mut buffer).unwrap();
+                    assert_ne!(count, 0);
+                    request.extend_from_slice(&buffer[..count]);
+                }
+                let header_end = request
+                    .windows(4)
+                    .position(|part| part == b"\r\n\r\n")
+                    .unwrap()
+                    + 4;
+                let headers = String::from_utf8_lossy(&request[..header_end]).into_owned();
+                let length = headers
+                    .lines()
+                    .find_map(|line| {
+                        line.to_ascii_lowercase()
+                            .strip_prefix("content-length:")
+                            .and_then(|value| value.trim().parse::<usize>().ok())
+                    })
+                    .unwrap_or(0);
+                while request.len() < header_end + length {
+                    let count = socket.read(&mut buffer).unwrap();
+                    assert_ne!(count, 0);
+                    request.extend_from_slice(&buffer[..count]);
+                }
+                let line = headers.lines().next().unwrap();
+                let method = line.split_whitespace().next().unwrap();
+                let url = url::Url::parse(&format!(
+                    "http://localhost{}",
+                    line.split_whitespace().nth(1).unwrap()
+                ))
+                .unwrap();
+                let body = match index {
+                    0 => {
+                        assert_eq!(method, "POST");
+                        assert_eq!(url.path(), "/api/login");
+                        let login: serde_json::Value =
+                            serde_json::from_slice(&request[header_end..]).unwrap();
+                        assert_eq!(login["username"], "audit-user");
+                        br#"{"token":"audit-token"}"#.to_vec()
+                    }
+                    1 => {
+                        assert_eq!(method, "PUT");
+                        assert!(url.path().contains("Test%20Game/save%20%3F.zip"));
+                        assert!(url.query().is_none());
+                        assert_eq!(&request[header_end..], server_data.as_slice());
+                        Vec::new()
+                    }
+                    2..=4 => {
+                        assert_eq!(method, "GET");
+                        assert_eq!(url.path(), "/api/files");
+                        assert!(url.query_pairs().any(|(key, value)| key == "prefix"
+                            && value.starts_with("BackupSync/games/")));
+                        items.as_bytes().to_vec()
+                    }
+                    5 => {
+                        assert_eq!(method, "GET");
+                        assert!(url.path().contains("Test%20Game/save%20%3F.zip"));
+                        server_data.clone()
+                    }
+                    _ => {
+                        assert_eq!(method, "DELETE");
+                        Vec::new()
+                    }
+                };
+                if index > 0 {
+                    assert!(headers
+                        .to_ascii_lowercase()
+                        .contains("authorization: bearer audit-token"));
+                }
+                let response=format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n",body.len());
+                socket.write_all(response.as_bytes()).unwrap();
+                socket.write_all(&body).unwrap();
+            }
+        });
+        let token = login(&endpoint, "audit-user", "audit-password")
+            .await
+            .unwrap();
+        let cloud = CustomCloud::new(endpoint, token).unwrap();
+        let root =
+            std::env::temp_dir().join(format!("backup-sync-custom-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let source = root.join("source.bin");
+        std::fs::write(&source, &data).unwrap();
+        let directory = vec!["BackupSync".into(), "games".into(), "Test Game".into()];
+        assert_eq!(
+            cloud
+                .upload_file(&directory, "save ?.zip", &source)
+                .await
+                .unwrap(),
+            file_id
+        );
+        let files = cloud.list_files(&directory).await.unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].id, file_id);
+        assert_eq!(
+            cloud.list_folders(&directory[..2]).await.unwrap()[0].name,
+            "Test Game"
+        );
+        assert_eq!(
+            cloud
+                .list_files_recursive(&directory.join("/"))
+                .await
+                .unwrap()
+                .len(),
+            2
+        );
+        let destination = root.join("download.bin");
+        cloud.download_file(file_id, &destination).await.unwrap();
+        assert_eq!(std::fs::read(&destination).unwrap(), data);
+        cloud.delete_file(file_id).await.unwrap();
+        worker.join().unwrap();
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

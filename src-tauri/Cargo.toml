@@ -1,6 +1,6 @@
 [package]
 name = "backup-sync"
-version = "0.5.2"
+version = "0.5.3"
 description = "Windows desktop backup app for folders and game saves"
 authors = ["Valentin"]
 edition = "2021"
@@ -38,3 +38,4 @@ rand = "0.8"
 walkdir = "2"
 async-trait = "0.1"
 url = "2"
+tauri-plugin-updater = { version = "2", default-features = false, features = ["rustls-tls", "system-proxy"] }

@@ -71,7 +71,6 @@ export interface ArtworkImage {
   thumb: string;
   width: number;
   height: number;
-  score: number;
   author: { name: string };
 }
 
@@ -139,4 +138,19 @@ export interface SyncProgress {
   id: string;
   status: "uploading" | "done" | "error";
   message: string | null;
+}
+
+export interface AppUpdateInfo {
+  currentVersion: string;
+  feedAvailable: boolean;
+  update: {
+    version: string;
+    notes: string | null;
+    downloaded: boolean;
+  } | null;
+}
+
+export interface AppUpdateProgress {
+  downloaded: number;
+  total: number | null;
 }

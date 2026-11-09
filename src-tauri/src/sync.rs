@@ -48,7 +48,7 @@ pub struct GameCloudStatus {
     pub latest_at: Option<String>,
 }
 
-struct SyncGuard {
+pub(crate) struct SyncGuard {
     active: Arc<StdMutex<std::collections::HashSet<String>>>,
     key: String,
 }
@@ -65,13 +65,38 @@ fn sync_key(kind: &str, id: &str) -> String {
     format!("{kind}:{id}")
 }
 
-fn begin_sync(app: &AppHandle, kind: &str, id: &str) -> Result<SyncGuard, String> {
+const APP_UPDATE_KEY: &str = "app:update";
+
+pub(crate) fn begin_app_update_install(
+    active: Arc<StdMutex<std::collections::HashSet<String>>>,
+) -> Result<SyncGuard, String> {
+    {
+        let mut set = active
+            .lock()
+            .map_err(|_| "Interný zámok synchronizácie je poškodený.".to_string())?;
+        if !set.is_empty() {
+            return Err(
+                "Počkajte na dokončenie zálohovania alebo obnovy a skúste inštaláciu znova.".into(),
+            );
+        }
+        set.insert(APP_UPDATE_KEY.to_string());
+    }
+    Ok(SyncGuard {
+        active,
+        key: APP_UPDATE_KEY.to_string(),
+    })
+}
+
+pub(crate) fn begin_sync(app: &AppHandle, kind: &str, id: &str) -> Result<SyncGuard, String> {
     let active = app.state::<AppState>().active_syncs.clone();
     let key = sync_key(kind, id);
     {
         let mut set = active
             .lock()
             .map_err(|_| "Interný zámok synchronizácie je poškodený.".to_string())?;
+        if set.contains(APP_UPDATE_KEY) {
+            return Err("Prebieha inštalácia aktualizácie aplikácie.".into());
+        }
         if !set.insert(key.clone()) {
             return Err("Táto synchronizácia už prebieha.".into());
         }
@@ -777,6 +802,11 @@ pub async fn connect_folder_backup(
         return Err(format!("Cieľový priečinok neexistuje: {destination}"));
     }
     let destination_canonical = canonical_path(destination)?;
+    let _sync = begin_sync(
+        app,
+        "connection",
+        &comparable_path(&destination_canonical).to_string_lossy(),
+    )?;
     let destination_path = PathBuf::from(destination);
     let cfg = snapshot(app).await;
     for folder in &cfg.watched_folders {
@@ -1263,6 +1293,20 @@ fn sorted_game_versions(files: Vec<RemoteFile>) -> Vec<RemoteFile> {
     files
 }
 
+fn sorted_tree_game_versions(files: Vec<RemoteTreeFile>) -> Vec<RemoteFile> {
+    sorted_game_versions(
+        files
+            .into_iter()
+            .map(|file| RemoteFile {
+                id: file.id,
+                name: file.relative_path,
+                created_at: file.modified_at,
+                size_bytes: file.size_bytes,
+            })
+            .collect(),
+    )
+}
+
 /// Zoznam verzií save-ov hry na cloude (najnovšie prvé).
 pub async fn list_game_versions(app: &AppHandle, id: &str) -> Result<Vec<RemoteFile>, String> {
     let cfg = snapshot(app).await;
@@ -1278,20 +1322,23 @@ pub async fn list_game_versions(app: &AppHandle, id: &str) -> Result<Vec<RemoteF
     ))
 }
 
-fn remote_game_version_is_newer(game: &crate::config::Game, latest: &RemoteFile) -> bool {
+fn remote_game_version_is_newer(
+    game: &crate::config::Game,
+    latest: &RemoteFile,
+    baseline: Option<&RemoteFile>,
+) -> bool {
     if game.last_cloud_version_id.as_deref() == Some(latest.id.as_str()) {
         return false;
     }
-    match (&latest.created_at, &game.last_upload) {
-        (Some(remote), Some(local)) => {
-            let remote = chrono::DateTime::parse_from_rfc3339(remote).ok();
-            let local = chrono::DateTime::parse_from_rfc3339(local).ok();
-            remote
-                .zip(local)
-                .is_none_or(|(remote, local)| remote > local + chrono::Duration::seconds(5))
-        }
+    let local = baseline.and_then(game_version_date).or_else(|| {
+        game.last_upload
+            .as_deref()
+            .and_then(|date| chrono::DateTime::parse_from_rfc3339(date).ok())
+    });
+    match (game_version_date(latest), local) {
+        (Some(remote), Some(local)) => remote > local + chrono::Duration::seconds(5),
         (Some(_), None) => true,
-        _ => false,
+        (None, _) => false,
     }
 }
 
@@ -1301,20 +1348,23 @@ pub async fn list_game_cloud_statuses(app: &AppHandle) -> Result<Vec<GameCloudSt
     let cfg = snapshot(app).await;
     let mut statuses = Vec::with_capacity(cfg.games.len());
     for game in &cfg.games {
-        let latest = match make_provider(game.provider, &cfg) {
+        let versions = match make_provider(game.provider, &cfg) {
             Ok(storage) => match storage.list_files(&game_remote_dir_for(game)).await {
-                Ok(files) => sorted_game_versions(files).into_iter().next(),
-                Err(_) => None,
+                Ok(files) => sorted_game_versions(files),
+                Err(_) => Vec::new(),
             },
-            Err(_) => None,
+            Err(_) => Vec::new(),
         };
-        let update_available = latest
-            .as_ref()
-            .is_some_and(|latest| remote_game_version_is_newer(game, latest));
+        let latest = versions.first();
+        let baseline = versions
+            .iter()
+            .find(|version| game.last_cloud_version_id.as_deref() == Some(version.id.as_str()));
+        let update_available =
+            latest.is_some_and(|latest| remote_game_version_is_newer(game, latest, baseline));
         statuses.push(GameCloudStatus {
             id: game.id.clone(),
             update_available,
-            latest_at: latest.and_then(|file| file.created_at),
+            latest_at: latest.and_then(|file| file.created_at.clone()),
         });
     }
     Ok(statuses)
@@ -1322,10 +1372,9 @@ pub async fn list_game_cloud_statuses(app: &AppHandle) -> Result<Vec<GameCloudSt
 
 /// Refresh the cloud listing at click time; reuse the protected restore path.
 pub async fn restore_latest_game_version(app: &AppHandle, id: &str) -> Result<(), String> {
-    let latest = list_game_versions(app, id)
-        .await?
-        .into_iter()
-        .next()
+    let versions = list_game_versions(app, id).await?;
+    let latest = versions
+        .first()
         .ok_or_else(|| "Na cloude nie je žiadna záloha tejto hry.".to_string())?;
     if latest.created_at.is_none() {
         return Err("Dátum najnovšej zálohy sa nedá určiť. Vyber ju cez Verzie.".into());
@@ -1336,7 +1385,10 @@ pub async fn restore_latest_game_version(app: &AppHandle, id: &str) -> Result<()
         .iter()
         .find(|game| game.id == id)
         .ok_or_else(|| "Hra sa nenašla.".to_string())?;
-    if !remote_game_version_is_newer(game, &latest) {
+    let baseline = versions
+        .iter()
+        .find(|version| game.last_cloud_version_id.as_deref() == Some(version.id.as_str()));
+    if !remote_game_version_is_newer(game, latest, baseline) {
         return Err(
             "Cloud už neobsahuje novšiu verziu. Stav hry sa aktualizuje pri ďalšej kontrole."
                 .into(),
@@ -1457,16 +1509,11 @@ pub async fn list_game_backups(
     let folders = storage.list_folders(&games_backups_root()).await?;
     let mut backups = Vec::with_capacity(folders.len());
     for folder in folders {
-        let versions: Vec<_> = storage
-            .list_files_recursive(&folder.id)
-            .await?
-            .into_iter()
-            .filter(|f| f.relative_path.to_lowercase().ends_with(".zip"))
-            .collect();
+        let versions = sorted_tree_game_versions(storage.list_files_recursive(&folder.id).await?);
         if versions.is_empty() {
             continue;
         }
-        let latest_at = versions.iter().filter_map(|f| f.modified_at.clone()).max();
+        let latest_at = versions.first().and_then(|file| file.created_at.clone());
         let size_bytes = versions
             .iter()
             .fold(0u64, |total, f| total.saturating_add(f.size_bytes));
@@ -1509,6 +1556,11 @@ pub async fn connect_game_backup(
         return Err(format!("Cieľový priečinok neexistuje: {destination}"));
     }
     let destination_canonical = canonical_path(destination)?;
+    let _sync = begin_sync(
+        app,
+        "connection",
+        &comparable_path(&destination_canonical).to_string_lossy(),
+    )?;
     let cfg = snapshot(app).await;
     for game in &cfg.games {
         if canonical_path(&game.save_path).ok().as_ref() == Some(&destination_canonical) {
@@ -1524,13 +1576,16 @@ pub async fn connect_game_backup(
         .find(|folder| folder.id == cloud_id)
         .ok_or_else(|| "Vybraná herná záloha už na cloude neexistuje.".to_string())?;
 
-    let latest = storage
-        .list_files_recursive(&folder.id)
-        .await?
+    let latest = sorted_tree_game_versions(storage.list_files_recursive(&folder.id).await?)
         .into_iter()
-        .filter(|f| f.relative_path.to_lowercase().ends_with(".zip"))
-        .max_by(|a, b| a.modified_at.cmp(&b.modified_at))
+        .next()
         .ok_or_else(|| "Táto herná záloha nemá žiadnu verziu.".to_string())?;
+    if latest.created_at.is_none() {
+        return Err(
+            "Dátum najnovšej zálohy sa nedá určiť. Pridaj hru ručne a vyber zálohu cez Verzie."
+                .into(),
+        );
+    }
 
     let name = if display_name.trim().is_empty() {
         prettify_cloud_name(&folder.name)
@@ -1607,7 +1662,7 @@ pub async fn connect_game_backup(
                 SyncState::Changed
             },
             last_change: None,
-            last_upload: latest.modified_at,
+            last_upload: latest.created_at,
             last_cloud_version_id: Some(latest.id),
             last_error: None,
             local: crate::config::GameLocalState {
@@ -1623,6 +1678,21 @@ pub async fn connect_game_backup(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn app_update_install_excludes_active_transfers_and_releases_its_lock() {
+        let active = std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashSet::new()));
+        active.lock().unwrap().insert("game:save".to_string());
+        assert!(super::begin_app_update_install(active.clone()).is_err());
+        assert!(!active.lock().unwrap().contains(super::APP_UPDATE_KEY));
+
+        active.lock().unwrap().clear();
+        let guard = super::begin_app_update_install(active.clone()).unwrap();
+        assert!(active.lock().unwrap().contains(super::APP_UPDATE_KEY));
+        assert!(super::begin_app_update_install(active.clone()).is_err());
+        drop(guard);
+        assert!(active.lock().unwrap().is_empty());
+    }
+
     use super::*;
 
     fn version(id: &str, name: &str, date: Option<&str>) -> RemoteFile {
@@ -1680,13 +1750,73 @@ mod tests {
         let mut game = test_game();
         let latest = version("latest", "save.zip", Some("2026-11-06T12:00:00Z"));
         game.last_upload = Some("2026-11-05T12:00:00Z".into());
-        assert!(remote_game_version_is_newer(&game, &latest));
+        assert!(remote_game_version_is_newer(&game, &latest, None));
         game.last_cloud_version_id = Some(latest.id.clone());
-        assert!(!remote_game_version_is_newer(&game, &latest));
+        assert!(!remote_game_version_is_newer(&game, &latest, None));
         assert!(!remote_game_version_is_newer(
             &test_game(),
-            &version("unknown", "unknown.zip", None)
+            &version("unknown", "unknown.zip", None),
+            None
         ));
+    }
+
+    #[test]
+    fn older_restored_version_is_compared_with_its_cloud_date() {
+        let mut game = test_game();
+        game.last_upload = Some("2026-11-06T14:00:00Z".into());
+        game.last_cloud_version_id = Some("restored-old".into());
+        let baseline = version("restored-old", "old.zip", Some("2026-11-05T12:00:00Z"));
+        let latest = version("latest", "latest.zip", Some("2026-11-06T12:00:00Z"));
+        assert!(remote_game_version_is_newer(
+            &game,
+            &latest,
+            Some(&baseline)
+        ));
+        assert!(!remote_game_version_is_newer(
+            &game,
+            &baseline,
+            Some(&baseline)
+        ));
+    }
+
+    #[test]
+    fn cloud_reconnection_sorts_recursive_versions_by_instants_and_filename_dates() {
+        let files = vec![
+            RemoteTreeFile {
+                id: "older".into(),
+                relative_path: "save_2026-09-12_10-00-00-000.zip".into(),
+                modified_at: None,
+                size_bytes: 3,
+            },
+            RemoteTreeFile {
+                id: "newest".into(),
+                relative_path: "save_2026-09-15_10-00-00-000.zip".into(),
+                modified_at: None,
+                size_bytes: 5,
+            },
+            RemoteTreeFile {
+                id: "metadata".into(),
+                relative_path: "notes.txt".into(),
+                modified_at: Some("2027-01-01T00:00:00Z".into()),
+                size_bytes: 1,
+            },
+            RemoteTreeFile {
+                id: "known".into(),
+                relative_path: "save.zip".into(),
+                modified_at: Some("2026-09-13T10:00:00+02:00".into()),
+                size_bytes: 7,
+            },
+        ];
+        let versions = sorted_tree_game_versions(files);
+        assert_eq!(
+            versions
+                .iter()
+                .map(|file| file.id.as_str())
+                .collect::<Vec<_>>(),
+            ["newest", "known", "older"]
+        );
+        assert!(versions[0].created_at.is_some());
+        assert_eq!(versions[0].size_bytes, 5);
     }
 
     fn test_game() -> crate::config::Game {

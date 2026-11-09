@@ -12,6 +12,7 @@ These guides describe the current `main` branch. For features in a downloaded in
 | [Custom cloud API](custom-cloud-api.md) | REST endpoints and storage semantics required by a compatible server |
 | [Frontend and backend IPC](ipc-contract.md) | Registered Tauri commands, JSON payloads, events, and client responsibilities |
 | [Release checklist](release-checklist.md) | Validation, Windows packaging, checksums, and GitHub publication |
+| [Application updates](app-updates.md) | In-app GitHub updates, signing keys, release assets, and installation checks |
 
 ## How the application fits together
 
@@ -36,6 +37,7 @@ The React frontend calls registered Tauri commands. Rust owns persisted configur
 | Content fingerprints and ZIP validation | [game_save.rs](../src-tauri/src/game_save.rs), [archive.rs](../src-tauri/src/archive.rs) |
 | Storage implementations | [storage](../src-tauri/src/storage) |
 | Artwork services | [artwork.rs](../src-tauri/src/artwork.rs), [Wikipedia adapter](../src-tauri/src/artwork/wikipedia.rs) |
+| Application updates | [updater.rs](../src-tauri/src/updater.rs), [frontend state](../src/useAppUpdater.ts), [release builder](../scripts/build-release.mjs) |
 
 ## State and credentials
 

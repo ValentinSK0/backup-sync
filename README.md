@@ -23,13 +23,15 @@ Backup Sync is a Windows desktop app for local game-save backups and cloud backu
 2. Run the installer and follow the setup steps.
 3. Launch **Backup Sync** from the Start menu.
 
-The Windows installer includes the offline WebView2 runtime and installs for the current user. The desktop app uses system APIs for credential storage and runs in the system tray.
+The Windows installer installs for the current user. Starting with v0.5.3, it uses zlib compression and includes a small WebView2 bootstrapper. Setup uses the existing WebView2 runtime when available. If the runtime is missing, setup needs an internet connection to download and install it.
+
+The desktop app uses system APIs for credential storage and runs in the system tray.
 
 **Requirements** are 64-bit Windows 10 or Windows 11. Cloud operations and artwork lookup need an internet connection.
 
 Published installers are currently unsigned. Windows SmartScreen may show a warning. Download from this repository and compare the file with the release's `.sha256` checksum.
 
-The README describes the current `main` branch. Packaged releases contain the features listed in their release notes. Wikipedia artwork support was added after v0.5.2.
+The README describes the current `main` branch. Packaged releases contain the features listed in their release notes. Wikipedia artwork and signed app updates are included starting with v0.5.3.
 
 ## Get started
 
@@ -153,6 +155,12 @@ Left-click the tray icon to reopen the window. Right-click it and choose **Quit*
 - **Choose the actual save directory.** Save paths are selected manually. Symbolic links inside a game's save directory are excluded from its ZIP.
 - **Cloud backup depends on the provider.** Account access, quotas, network availability, and the provider's API determine whether a transfer succeeds.
 
+## App updates
+
+Open **Settings** (`Nastavenia`) to check for a newer app version, download it and select **Install and restart** (`Nainštalovať a reštartovať`). The app also checks GitHub automatically at startup and every six hours. Downloads are verified with the embedded updater signing key. Installation requires backups and restores to finish first.
+
+Releases must provide the signed installer and `latest.json`. Versions predating this feature need one manual installation of an updater-capable build. [Update behavior and release setup](docs/app-updates.md)
+
 ## Development
 
 The frontend uses React 19, TypeScript, Vite 7, and Tailwind CSS 4. The backend uses Rust and Tauri 2.
@@ -168,10 +176,10 @@ Build the frontend or create a Windows installer.
 
 ```powershell
 npm run build
-npm run tauri build
+npm run build:release
 ```
 
-The NSIS installer is written to `src-tauri/target/release/bundle/nsis/`.
+The NSIS installer is written to `src-tauri/target/release/bundle/nsis/`. Release builds require the updater signing key. The release script also prepares the installer, signature, checksum and update manifest under `release-artifacts/v<version>/`. [Signing setup](docs/app-updates.md)
 
 Run the core checks before publishing changes.
 

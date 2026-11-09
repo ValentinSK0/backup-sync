@@ -51,7 +51,7 @@ Operations are guarded per target. A monitoring check arriving during a game ope
 | `local.lastBackup` | Time a new normal local snapshot was recorded |
 | `local.backupFile` / `local.backupHash` | Latest normal local ZIP and its content fingerprint |
 | `local.uploadedHash` | Fingerprint of the successfully uploaded or restored cloud snapshot |
-| `lastUpload` | Last recorded upload or restore time |
+| `lastUpload` | Last recorded upload time, or the selected cloud version date when first connecting a game |
 | `lastCloudVersionId` | Last known uploaded or restored cloud version ID |
 | `local.watchError` | Native monitoring problem reported separately from transfer errors |
 
@@ -61,7 +61,9 @@ Cloud history contains uploaded ZIP versions. Local-only ZIPs are accessed throu
 
 The app sorts ZIPs by parsed provider timestamps, then by recognized timestamps in filenames when needed. It compares actual timestamp values across time zones. Historical filename timestamps have no zone and are interpreted in the current PC's local zone. Versions with unknown dates remain in the history.
 
-The newer-version indicator checks the latest version against the stored version ID and last upload or restore time. For dated versions, the normal time comparison uses a five-second tolerance. A failed provider listing does not produce a newer-version indicator, so its absence alone does not confirm cloud availability.
+The newer-version indicator checks the latest version against the stored cloud version ID. When that version is still listed, its date is the local baseline, including after restoring an older save. Otherwise the comparison falls back to `lastUpload`. For dated versions, the normal time comparison uses a five-second tolerance. A failed provider listing does not produce a newer-version indicator, so its absence alone does not confirm cloud availability.
+
+Connecting an existing cloud game uses the same ordering and filename-date fallback as version history. If all version dates are unknown, the app asks the user to add the game manually and choose a backup through **Versions** (`Verzie`).
 
 The latest-version restore command refreshes the listing and rechecks the comparison. If it cannot determine the latest backup's date, it asks the user to select a version manually.
 

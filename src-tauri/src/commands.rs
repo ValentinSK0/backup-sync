@@ -148,9 +148,7 @@ pub async fn add_watched_folder(
 
 #[tauri::command]
 pub async fn remove_watched_folder(app: AppHandle, id: String) -> CmdResult<AppConfig> {
-    if sync::is_sync_active(&app, "folder", &id) {
-        return Err("Počkaj, kým sa zálohovanie priečinka dokončí.".into());
-    }
+    let _sync = sync::begin_sync(&app, "folder", &id)?;
     let cfg = sync::with_config(&app, |c| c.watched_folders.retain(|f| f.id != id)).await?;
     let state = app.state::<AppState>();
     let _ = std::fs::remove_file(state.state_dir().join(format!("folder-{id}.json")));
@@ -229,9 +227,7 @@ pub async fn update_game(
     backup_path: String,
     provider: Provider,
 ) -> CmdResult<AppConfig> {
-    if sync::is_sync_active(&app, "game", &id) {
-        return Err("Počkaj, kým sa synchronizácia hry dokončí.".into());
-    }
+    let _sync = sync::begin_sync(&app, "game", &id)?;
     let name = name.trim();
     if name.is_empty() {
         return Err("Zadaj názov hry.".into());
@@ -297,9 +293,7 @@ pub async fn update_game(
 
 #[tauri::command]
 pub async fn remove_game(app: AppHandle, id: String) -> CmdResult<AppConfig> {
-    if sync::is_sync_active(&app, "game", &id) {
-        return Err("Počkaj, kým sa synchronizácia hry dokončí.".into());
-    }
+    let _sync = sync::begin_sync(&app, "game", &id)?;
     let cfg = sync::with_config(&app, |c| c.games.retain(|g| g.id != id)).await?;
     watcher::rebuild(&app, &cfg);
     Ok(cfg)

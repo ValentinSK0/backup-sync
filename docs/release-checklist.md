@@ -47,20 +47,26 @@ A successful build does not verify that an OAuth project is configured correctly
 Use the Windows Rust/MSVC and Tauri build prerequisites described in the [project README](../README.md).
 
 ```powershell
-npm run tauri build -- --bundles nsis
+npm run build:release -- --notes-file path/to/release-notes.md
 ```
 
 The build runs the frontend production build and produces `BackupSync.exe` plus the NSIS setup under `src-tauri/target/release/bundle/nsis/`.
+
+The release script supplies the updater signing key and copies the installer, signature, checksum and `latest.json` to `release-artifacts/v<version>/`. Restore the existing private key before building on a new machine. [Updater signing and publication](app-updates.md)
 
 Verify the packaging configuration against `tauri.conf.json`.
 
 - x64 Windows NSIS installer
 - Current-user installation
-- Offline WebView2 installer
+- Embedded WebView2 bootstrapper with silent installation
+- zlib compression
+- Updater signature containing the matching version and a manifest pointing to the final release asset
 - Expected product name, identifier, icon, and version
 - Release executable DLL dependencies and Authenticode status
 
 Test in a disposable Windows user or VM, including first launch, upgrade, app-data persistence, tray exit, and a restart. Redirecting only `APPDATA` does not isolate Windows Credential Manager. Avoid using real saves or production accounts for this check.
+
+Check setup on a machine with WebView2 already installed and on a clean machine without it. The bootstrapper requires internet access when the runtime is missing. Record installation times separately for these cases. The installer embeds only the small bootstrapper, which avoids carrying the full offline runtime installer in every app update.
 
 If a clean-install or authenticated-cloud check could not run, state that in the release notes. Unsigned installers can trigger Windows SmartScreen.
 
@@ -86,14 +92,14 @@ Commit the reviewed release changes to the intended branch, create an annotated 
 Create the GitHub release as a draft and require the tag to exist.
 
 ```powershell
-gh release create vX.Y.Z <installer.exe> <installer.exe.sha256> --verify-tag --draft --title "Backup Sync vX.Y.Z" --notes-file <release-notes.md>
+gh release create vX.Y.Z <installer.exe> <installer.exe.sig> <installer.exe.sha256> <latest.json> --verify-tag --draft --title "Backup Sync vX.Y.Z" --notes-file <release-notes.md>
 ```
 
-The release notes should explain user-visible changes, installation, actual test coverage, and material limitations. Attach the installer and checksum. Verify asset names, byte sizes, and upload completion.
+The release notes should explain user-visible changes, installation, actual test coverage, and material limitations. Attach the installer, updater signature, checksum and `latest.json`. Verify asset names, byte sizes, and upload completion.
 
 ## 7. Verify downloads and publish
 
-1. Download the installer and checksum from the draft release to a separate verification directory.
+1. Download all four release assets from the draft release to a separate verification directory.
 2. Compare the downloaded installer hash with the local installer, downloaded checksum, and GitHub asset digest where available.
 3. Publish the release and mark it latest.
 
@@ -102,6 +108,7 @@ gh release edit vX.Y.Z --draft=false --latest
 ```
 
 4. Verify the canonical release URL, tag, target commit, published state, asset links, and the repository's latest-release endpoint.
+   Confirm that `/releases/latest/download/latest.json` resolves and that its version, signature and installer URL match the published assets. Test the in-app update flow from an older updater-capable installation in a disposable Windows environment.
 5. Confirm the local working tree and remote branch are in the expected state.
 
 A draft can use a temporary URL. Use the final `/releases/tag/vX.Y.Z` URL after publication. Rebuilding after publication changes the artifact identity and requires a new verification and publication decision.

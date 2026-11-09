@@ -10,6 +10,7 @@ import {
   updateSettings,
 } from "../api";
 import { CloudIcon } from "../components/icons";
+import AppUpdateCard from "../components/AppUpdateCard";
 import {
   Button,
   Card,
@@ -228,6 +229,7 @@ export default function Settings() {
       />
 
       <div className="flex max-w-2xl flex-col gap-5">
+        <AppUpdateCard />
         <Section
           title="Zálohovanie"
           description="Správanie automatického nahrávania a kompresie záloh."

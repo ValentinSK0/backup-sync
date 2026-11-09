@@ -128,11 +128,23 @@ interface ArtworkImage {
 }
 ```
 
-The Rust image payload does not include a score, although the current frontend interface still declares one. Consumers must use the fields actually supplied by the backend. Image dimensions can be zero when the catalogue does not provide them.
+Image dimensions can be zero when the catalogue does not provide them.
 
 Persisted `GameArtwork` also records source, catalogue game ID/name, image ID, category, URL, credit, and `selectedManually`. Legacy saved selections can have source `steamgriddb`. New catalogue search accepts the two current providers.
 
 The full lookup and cache behavior is documented in the [artwork guide](artwork.md).
+
+### Application updates
+
+| Command | Arguments | Return |
+| --- | --- | --- |
+| `check_app_update` | None | `AppUpdateInfo` |
+| `download_app_update` | `{ onProgress: Channel<AppUpdateProgress> }` | `AppUpdateInfo` |
+| `install_app_update` | None | `null` on failure-free return; Windows normally exits after starting setup |
+
+`AppUpdateInfo` contains `currentVersion`, `feedAvailable` and a nullable `update` with `version`, nullable `notes` and `downloaded`. Download channel messages contain cumulative `downloaded` bytes and nullable `total` bytes. A successful download return means the updater signature and signed version have been verified.
+
+Operations are serialized in Rust. Installation rejects active backups or restores and prevents new transfers from starting while setup is launched. Failed installation attempts retain the verified bytes for retry. The update state lasts for the current process. [Application update behavior](app-updates.md)
 
 ### Local folder access
 

@@ -1,7 +1,9 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type {
   AppConfig,
+  AppUpdateInfo,
+  AppUpdateProgress,
   ArtworkSearchResult,
   ArtworkSource,
   ArtworkImage,
@@ -12,6 +14,22 @@ import type {
   Settings,
   VersionInfo,
 } from "./types";
+
+export function checkAppUpdate(): Promise<AppUpdateInfo> {
+  return invoke<AppUpdateInfo>("check_app_update");
+}
+
+export function downloadAppUpdate(
+  onProgress: (progress: AppUpdateProgress) => void,
+): Promise<AppUpdateInfo> {
+  const channel = new Channel<AppUpdateProgress>();
+  channel.onmessage = onProgress;
+  return invoke<AppUpdateInfo>("download_app_update", { onProgress: channel });
+}
+
+export function installAppUpdate(): Promise<void> {
+  return invoke<void>("install_app_update");
+}
 
 export function getConfig(): Promise<AppConfig> {
   return invoke<AppConfig>("get_config");

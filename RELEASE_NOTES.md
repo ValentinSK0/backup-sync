@@ -1,45 +1,39 @@
-# Release notes
+# Backup Sync v0.5.3
 
-The latest packaged release is **v0.5.2**, published on November 9, 2026. These notes describe that installer. Changes added afterward are listed under Unreleased in the changelog. [Changelog](CHANGELOG.md)
+Published on November 9, 2026. This release brings a smaller Windows installer, signed in-app updates, artwork for games outside Steam, and backup reliability fixes.
 
-## Backup Sync v0.5.2
+## Changes
 
-The dashboard presents backup status, pending work, and recent activity in a redesigned layout.
+- Reduced the Windows installer from about 222 MB to about 8.4 MB by embedding a small WebView2 bootstrapper and using zlib compression.
+- Added automatic update checks at startup and every six hours. Settings provides download progress, release notes, signature verification, and an **Install and restart** action.
+- Required updater signatures to cover the announced version. Installation is blocked while backups, restores, cloud-backup connections, or guarded item changes are active.
+- Added public Wikipedia artwork lookup alongside Steam, with automatic fallback, manual selection, and local image caching. Artwork lookup needs no login or API key.
+- Used consistent chronological ordering and filename-date fallback when reconnecting cloud games. After restoring an older save, the card can offer the newer cloud version again.
+- Prevented game and folder changes from racing with synchronization. Cloud catalogue reads use existing directories without creating missing ones.
+- Streamed Ulož.to downloads to disk and corrected custom-cloud direct listings and IPv6 loopback handling.
+- Updated the English documentation and preserved the animated README banner.
 
-### Changes
+## Installation and updates
 
-- A synchronization summary shows actual item counts, errors, pending changes, and the last recorded synchronization time.
-- Navigation cards open the game library, watched folders, and cloud settings.
-- An attention panel groups errors and items waiting for synchronization.
-- An activity timeline shows operations received during the current session.
-- A cloud panel shows provider connection status.
-- Responsive layouts support the minimum 900 × 620 application window and provide distinct empty and synchronization states.
+Download `Backup.Sync_0.5.3_x64-setup.exe` and its `.sha256` checksum. The installer supports current-user Windows x64 installations and existing installation upgrades.
 
-The installer includes the earlier game-card redesign, public Steam artwork, and latest-cloud-version restore action from v0.5.0 and v0.5.1.
+Versions up to v0.5.2 need one manual installation to gain the in-app updater. Later updater-capable releases can be downloaded and installed through Settings.
 
-### Install
+If WebView2 is already installed, setup reuses it. If it is missing, setup requires internet access to download the runtime from Microsoft. That additional download can be around 200 MB, depending on the runtime version.
 
-Download `Backup.Sync_0.5.2_x64-setup.exe` and its `.sha256` sidecar from the release page. The installer supports updating an existing installation and includes the offline WebView2 runtime. It installs for the current Windows user.
+The updater uses a cryptographic signature. Windows Authenticode signing is separate and the installer remains unsigned, so Windows SmartScreen may show a warning. Verify the downloaded installer with the published SHA-256 sidecar.
 
-The installer is unsigned. Windows SmartScreen may show a warning. Compare the downloaded file with the published checksum.
+## Verification
 
-```text
-2979bd4874a958576ff43cddbb015be346b3dd268cca44bbb5d5788fc0b85a67
-```
+- Clean dependency installation and the TypeScript/Vite production build passed.
+- The default Rust suite passed 42 tests, with two live-network tests excluded from the default run. Both live Steam and Wikipedia tests were also run successfully.
+- Clippy passed with warnings denied. npm audit reported zero vulnerabilities. Cargo audit reported zero vulnerabilities and 10 upstream warnings.
+- Native Windows checks covered game creation, verified local ZIP contents, same-size edits with preserved timestamps, changes while the app was stopped, configuration persistence, window hiding, and single-instance reopening.
+- Authenticated Ulož.to checks covered backup discovery, download into an isolated directory, older-version restoration, protective ZIP contents, the newer-version card action, and restoration of the latest save.
+- An actual signed update between two isolated test builds completed through download, verification, installation, exit, and relaunch using a local test feed. Test configuration, saves, and ZIP backups were preserved.
+- A silent test installation completed in 1.56 seconds on the test PC with WebView2 already installed. Installation times depend on the machine and runtime availability.
+- Installer checksums, the public signing key, signed version, and update manifest were checked. Modified installer bytes and modified signed-version metadata were rejected.
 
-### Validation recorded for v0.5.2
+Authenticated Google Drive upload and restore, cloud uploads to production accounts, and first-time installation on a clean Windows machine without WebView2 were outside this release's completed validation. The custom-cloud protocol was exercised against a local HTTP test server.
 
-- TypeScript and Vite production build passed.
-- Rust tests recorded 33 passes and one ignored live-network test.
-- Clippy passed with warnings denied.
-- npm audit reported zero known vulnerabilities at release time. Cargo audit completed with 10 upstream warnings.
-- Dashboard layout, navigation, long names, empty states, and synchronization states were checked using preview data.
-- Clean-profile installation and authenticated cloud transfer were outside that release's recorded validation.
-
-### Current source development
-
-The `main` branch includes Wikipedia artwork fallback and selection for games outside Steam, together with the English documentation updates. Build from `main` to use those changes until a later installer includes them.
-
-Current test counts and audit findings belong to their individual runs. Consult the technical guides for the current behavior and verification commands. [Documentation](docs/README.md)
-
-[Download v0.5.2](https://github.com/ValentinSK0/backup-sync/releases/tag/v0.5.2) · [Latest release](https://github.com/ValentinSK0/backup-sync/releases/latest)
+The release includes the installer, `.sig`, `.sha256`, and `latest.json` assets. [Download v0.5.3](https://github.com/ValentinSK0/backup-sync/releases/tag/v0.5.3)

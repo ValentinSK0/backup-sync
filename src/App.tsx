@@ -12,6 +12,7 @@ import Folders from "./pages/Folders";
 import Games from "./pages/Games";
 import Settings from "./pages/Settings";
 import type { AppConfig, SyncProgress } from "./types";
+import { useAppUpdater } from "./useAppUpdater";
 
 export type Page = "dashboard" | "folders" | "games" | "settings";
 
@@ -27,6 +28,7 @@ const TOAST_TTL_MS = 5000;
 let nextId = 0;
 
 export default function App() {
+  const updater = useAppUpdater();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [page, setPage] = useState<Page>("dashboard");
@@ -147,10 +149,18 @@ export default function App() {
   }
 
   return (
-    <AppContext.Provider value={{ config, setConfig, toast }}>
+    <AppContext.Provider value={{ config, setConfig, toast, updater }}>
       <div className="flex h-screen overflow-hidden bg-zinc-950 text-zinc-100">
         <Sidebar page={page} onNavigate={setPage} />
         <main className="min-w-0 flex-1 overflow-y-auto px-8 py-6">
+          {updater.info?.update && page !== "settings" && (
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-4 py-3">
+              <p className="text-sm text-indigo-100">
+                Backup Sync {updater.info.update.version} je {updater.info.update.downloaded ? "pripravený na inštaláciu" : "dostupný"}.
+              </p>
+              <Button onClick={() => setPage("settings")}>Zobraziť aktualizáciu</Button>
+            </div>
+          )}
           {page === "dashboard" && <Dashboard activity={activity} onNavigate={setPage} />}
           {page === "folders" && <Folders />}
           {page === "games" && <Games />}

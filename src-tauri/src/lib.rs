@@ -6,6 +6,7 @@ mod game_save;
 mod storage;
 mod sync;
 mod tray;
+mod updater;
 mod watcher;
 
 use config::{AppConfig, SyncState};
@@ -45,6 +46,8 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updater::UpdateState::default())
         // zatvorenie okna appku neukončí, iba schová do tray
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -115,6 +118,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            updater::check_app_update,
+            updater::download_app_update,
+            updater::install_app_update,
             commands::get_config,
             commands::update_settings,
             commands::save_gdrive_credentials,
