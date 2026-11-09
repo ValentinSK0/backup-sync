@@ -27,7 +27,7 @@ Automatic lookup records a checked-name marker. The current internal marker reta
 ## Manual selection
 
 1. Open a game card's settings.
-2. Select **Vybrať obrázok**.
+2. Select **Choose image** (`Vybrať obrázok` in the current Slovak interface).
 3. Search for a title and choose the correct game or edition.
 4. Click an image to save it.
 

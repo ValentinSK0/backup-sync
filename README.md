@@ -33,21 +33,21 @@ The README describes the current `main` branch. Packaged releases contain the fe
 
 ## Get started
 
-The current app interface is in Slovak. The labels below match the controls you will see.
+The current app interface is in Slovak. English action names below are followed by the corresponding UI labels in parentheses.
 
 ### Back up a game
 
-1. Open **Hry** and select **Pridať hru**.
+1. Open **Games** (`Hry`) and select **Add game** (`Pridať hru`).
 2. Enter the game's name and select its entire save directory.
 3. Choose a separate directory for local ZIP backups, outside the save directory.
-4. Select a cloud provider. Connect it in **Nastavenia** to upload backups.
-5. Use **Zálohovať lokálne** to create a local snapshot or **Nahrať na cloud** to upload it.
+4. Select a cloud provider. Connect it in **Settings** (`Nastavenia`) to upload backups.
+5. Use **Back up locally** (`Zálohovať lokálne`) to create a local snapshot or **Upload to cloud** (`Nahrať na cloud`) to upload it.
 
 The app watches nested save directories too. For example, selecting a game's parent save directory also covers new saves created inside it.
 
 ### Back up a folder
 
-Open **Priečinky**, select **Pridať nový**, and choose the folder and cloud provider. Run a manual backup or enable automatic cloud backups after changes.
+Open **Folders** (`Priečinky`), select **Add new** (`Pridať nový`), and choose the folder and cloud provider. Run a manual backup or enable automatic cloud backups after changes.
 
 Folder backups compare file-content hashes and upload changed files individually. Game backups package the save directory into versioned ZIP archives.
 
@@ -77,14 +77,14 @@ These checks help avoid backing up an inconsistent save. Close the game before r
 
 ### Download a newer cloud save
 
-When the app detects a newer cloud version, the game card offers **Stiahnuť najnovšiu verziu**. Confirm the action after closing the game. The app refreshes the cloud listing, selects the newest dated backup, and makes a protective ZIP of existing local save files before restoring.
+When the app detects a newer cloud version, the game card offers **Download latest version** (`Stiahnuť najnovšiu verziu`). Confirm the action after closing the game. The app refreshes the cloud listing, selects the newest dated backup, and makes a protective ZIP of existing local save files before restoring.
 
-Open **Verzie** to browse cloud versions and choose an older backup manually. A local ZIP appears in that history only after it has been uploaded.
+Open **Versions** (`Verzie`) to browse cloud versions and choose an older backup manually. A local ZIP appears in that history only after it has been uploaded.
 
 ### Connect an existing backup on another PC
 
-1. Connect the same cloud account or compatible server in **Nastavenia**.
-2. For a game, open **Hry** and select **Vybrať z cloudu**. For a folder, open **Priečinky** and select **Pripojiť z cloudu**.
+1. Connect the same cloud account or compatible server in **Settings** (`Nastavenia`).
+2. For a game, open **Games** (`Hry`) and select **Choose from cloud** (`Vybrať z cloudu`). For a folder, open **Folders** (`Priečinky`) and select **Connect from cloud** (`Pripojiť z cloudu`).
 3. Choose the existing cloud backup and its local destination.
 4. For games, also choose the local ZIP backup directory.
 5. Download and connect the backup.
@@ -101,7 +101,7 @@ Connecting a game downloads its latest version and adds it to the library. Exist
 
 ### Google Drive
 
-A release build may include an OAuth Client ID. The app also requires the Client Secret from the same **Desktop app** OAuth client, entered in **Nastavenia**. The Google Drive API must be enabled for that client.
+A release build may include an OAuth Client ID. The app also requires the Client Secret from the same **Desktop app** OAuth client, entered in **Settings** (`Nastavenia`). The Google Drive API must be enabled for that client.
 
 For your own build, create an OAuth 2.0 Desktop app client and optionally supply its public Client ID before building.
 
@@ -116,13 +116,13 @@ Access follows the OAuth project's publishing status and permitted users. Config
 
 ### Ulož.to Disk
 
-In **Nastavenia**, enter your login and an application login token generated in your Ulož.to account settings.
+In **Settings** (`Nastavenia`), enter your login and an application login token generated in your Ulož.to account settings.
 
 You can supply your own application API key obtained from Ulož.to support. Otherwise, the app uses the public test application key documented in the source, which may change or stop working. Uploads use the provider's chunked API, with retries for failed chunks.
 
 ### Custom cloud
 
-Provide the server endpoint, username, and password in **Nastavenia**. The server must implement the project's API, including login, file upload, download, and listing. Production endpoints require HTTPS. HTTP is permitted for loopback addresses during local development.
+Provide the server endpoint, username, and password in **Settings** (`Nastavenia`). The server must implement the project's API, including login, file upload, download, and listing. Production endpoints require HTTPS. HTTP is permitted for loopback addresses during local development.
 
 The API contract is documented separately. [Custom cloud API](docs/custom-cloud-api.md)
 
@@ -132,7 +132,7 @@ Game cards look up images by title through public catalogues without an artwork-
 
 - **Steam** provides cover images, backgrounds, and screenshots.
 - **Wikipedia** supplies the article's main image for games outside Steam, including titles such as StarCraft. Automatic lookup falls back to Wikipedia when Steam cannot supply a matching image.
-- **Manual selection** is available through the game card's settings and **Vybrať obrázok**. Opening this picker searches both catalogues and labels each result by source.
+- **Manual selection** is available through the game card's settings and **Choose image** (`Vybrať obrázok`). Opening this picker searches both catalogues and labels each result by source.
 
 Ambiguous automatic matches are left for manual selection. The chosen image is saved with the game and cached for offline display. Image availability, resolution, and ownership depend on the source.
 
@@ -140,7 +140,7 @@ Ambiguous automatic matches are left for manual selection. The chosen image is s
 
 Closing the main window hides the app in the system tray. Monitoring and automatic backups continue while the process is running.
 
-Left-click the tray icon to reopen the window. Right-click it and choose **Ukončiť** to exit. Launching the app again brings the existing instance to the front.
+Left-click the tray icon to reopen the window. Right-click it and choose **Quit** (`Ukončiť`) to exit. Launching the app again brings the existing instance to the front.
 
 ## Behavior to understand
 
@@ -148,7 +148,7 @@ Left-click the tray icon to reopen the window. Right-click it and choose **Ukon�
 - **Folder backups retain extra files.** Uploading replaces files with matching paths and leaves cloud-only files in place. Restoring replaces matching local files and keeps other local files.
 - **Restoring game saves also keeps extra local files.** Files absent from the archive can remain in the destination, so the resulting local content may still be marked as changed.
 - **Backups use storage space.** Game ZIPs and their cloud versions have no automatic retention policy.
-- **Dates affect latest-version detection.** If the provider omits a timestamp, the app tries the ZIP filename. Historical filenames use the PC's local time zone. Backups with unknown dates remain accessible through **Verzie**.
+- **Dates affect latest-version detection.** If the provider omits a timestamp, the app tries the ZIP filename. Historical filenames use the PC's local time zone. Backups with unknown dates remain accessible through **Versions** (`Verzie`).
 - **Older configurations may need one manual upload.** A legacy save without a cloud-content fingerprint needs an explicit upload to establish its baseline before automatic uploads resume.
 - **Choose the actual save directory.** Save paths are selected manually. Symbolic links inside a game's save directory are excluded from its ZIP.
 - **Cloud backup depends on the provider.** Account access, quotas, network availability, and the provider's API determine whether a transfer succeeds.
