@@ -150,8 +150,8 @@ export default function App() {
     <AppContext.Provider value={{ config, setConfig, toast }}>
       <div className="flex h-screen overflow-hidden bg-zinc-950 text-zinc-100">
         <Sidebar page={page} onNavigate={setPage} />
-        <main className="flex-1 overflow-y-auto px-8 py-6">
-          {page === "dashboard" && <Dashboard activity={activity} />}
+        <main className="min-w-0 flex-1 overflow-y-auto px-8 py-6">
+          {page === "dashboard" && <Dashboard activity={activity} onNavigate={setPage} />}
           {page === "folders" && <Folders />}
           {page === "games" && <Games />}
           {page === "settings" && <Settings />}
