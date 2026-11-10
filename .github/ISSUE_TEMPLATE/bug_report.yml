@@ -1,0 +1,63 @@
+name: Bug report
+description: Report a reproducible problem with Backup Sync.
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Use sample paths and files when possible. For security vulnerabilities, follow the security policy instead of posting details here."
+  - type: input
+    id: app-version
+    attributes:
+      label: Backup Sync version
+      placeholder: "For example, v0.5.4"
+    validations:
+      required: true
+  - type: input
+    id: windows-version
+    attributes:
+      label: Windows version
+      placeholder: "For example, Windows 11 24H2"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Game backups or restoration
+        - Folder backups or restoration
+        - Google Drive
+        - Ulož.to Disk
+        - Custom cloud
+        - Artwork
+        - App updates or installation
+        - Interface or settings
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Describe the steps that lead to the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the exact error message if available.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add relevant screenshots or details. Remove tokens, account information and personal paths before sharing.

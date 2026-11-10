@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://github.com/ValentinSK0/backup-sync/tree/main/docs
+    about: Setup, backup behavior, cloud providers and technical guides.
+  - name: Download the Windows app
+    url: https://github.com/ValentinSK0/backup-sync/releases/latest
+    about: Get the latest installer and release notes.

@@ -2,11 +2,32 @@
 
 # Backup Sync
 
+![Latest release](https://img.shields.io/github/v/release/ValentinSK0/backup-sync?style=flat-square&color=8b5cf6) ![Downloads](https://img.shields.io/github/downloads/ValentinSK0/backup-sync/total?style=flat-square&color=8b5cf6) ![Windows 10 and 11](https://img.shields.io/badge/Windows-10%20%7C%2011-6366f1?style=flat-square) ![Built with Tauri 2](https://img.shields.io/badge/Tauri-2-24c8db?style=flat-square)
+
 **Keep your game progress backed up, your folders within reach, and your next PC ready to pick up where you left off.**
 
 Backup Sync is a Windows desktop app for local game-save backups and cloud backups of games and folders. Choose the directories you care about, keep verified ZIP snapshots of your saves, and send backups to Google Drive, Ulož.to Disk, or a compatible server you control.
 
-[Download the latest Windows installer](https://github.com/ValentinSK0/backup-sync/releases/latest) · [Release history](https://github.com/ValentinSK0/backup-sync/releases)
+[**Download for Windows**](https://github.com/ValentinSK0/backup-sync/releases/latest) · [Documentation](docs/README.md) · [Report a bug](https://github.com/ValentinSK0/backup-sync/issues/new?template=bug_report.yml) · [Suggest a feature](https://github.com/ValentinSK0/backup-sync/issues/new?template=feature_request.yml)
+
+| Your game progress | Your choice of storage | Your next PC |
+| --- | --- | --- |
+| Verified local ZIP snapshots and cloud save history | Google Drive, Ulož.to Disk or a compatible server | Connect an existing cloud backup and restore into a local directory |
+
+## Interface preview
+
+The overview brings backup status, connected clouds and recent activity together. Screenshots use sample data. The current interface is in Slovak.
+
+![Backup Sync overview with sample backup status and recent activity](docs/assets/overview.jpg)
+
+<details>
+<summary>View the folder backup cards</summary>
+
+Folder cards show the latest backup, automation mode, local path and cloud actions.
+
+![Folder backup cards with sample directories](docs/assets/folders.jpg)
+
+</details>
 
 ## Why use Backup Sync?
 
@@ -195,6 +216,7 @@ Live catalogue tests are ignored by default because they access external service
 
 Further technical details are available in the English documentation guides. Start with the [documentation index](docs/README.md).
 
+- [Contributing](CONTRIBUTING.md)
 - [Game-save verification](docs/game-save-verification.md)
 - [Artwork providers](docs/artwork.md)
 - [IPC contract](docs/ipc-contract.md)
