@@ -25,7 +25,7 @@ Backup Sync is a Windows desktop app for local game-save backups and cloud backu
 
 The Windows installer installs for the current user. Starting with v0.5.3, it uses zlib compression and includes a small WebView2 bootstrapper. Setup uses the existing WebView2 runtime when available. If the runtime is missing, setup needs an internet connection to download and install it.
 
-The desktop app uses system APIs for credential storage and runs in the system tray.
+The desktop app uses system APIs for credential storage and supports optional background operation in the system tray.
 
 **Requirements** are 64-bit Windows 10 or Windows 11. Cloud operations and artwork lookup need an internet connection.
 
@@ -140,7 +140,9 @@ Ambiguous automatic matches are left for manual selection. The chosen image is s
 
 ## Runs in the background
 
-Closing the main window hides the app in the system tray. Monitoring and automatic backups continue while the process is running.
+The tray icon is disabled by default, including for older configurations without this preference. Closing the main window exits the app in this mode.
+
+Enable **Show tray icon and keep the app running in the background** (`Zobraziť ikonu v tray a ponechať aplikáciu na pozadí`) in Settings to hide the window on close and continue monitoring and automatic backups. The switch takes effect immediately and is saved in this device's local `config.json` across restarts.
 
 Left-click the tray icon to reopen the window. Right-click it and choose **Quit** (`Ukončiť`) to exit. Launching the app again brings the existing instance to the front.
 

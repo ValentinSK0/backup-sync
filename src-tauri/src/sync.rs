@@ -1347,8 +1347,12 @@ fn remote_game_version_is_newer(
 pub async fn list_game_cloud_statuses(app: &AppHandle) -> Result<Vec<GameCloudStatus>, String> {
     let cfg = snapshot(app).await;
     let mut statuses = Vec::with_capacity(cfg.games.len());
+    let mut providers = HashMap::new();
     for game in &cfg.games {
-        let versions = match make_provider(game.provider, &cfg) {
+        let storage = providers
+            .entry(game.provider)
+            .or_insert_with(|| make_provider(game.provider, &cfg));
+        let versions = match storage {
             Ok(storage) => match storage.list_files(&game_remote_dir_for(game)).await {
                 Ok(files) => sorted_game_versions(files),
                 Err(_) => Vec::new(),

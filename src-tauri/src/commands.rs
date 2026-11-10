@@ -4,7 +4,7 @@ use crate::sync;
 use crate::watcher;
 use crate::AppState;
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 type CmdResult<T> = Result<T, String>;
 
@@ -19,14 +19,31 @@ pub async fn update_settings(app: AppHandle, settings: Settings) -> CmdResult<Ap
         return Err("Oneskorenie musí byť celé číslo od 1 do 3600 sekúnd.".into());
     }
     let mut settings = settings;
-    let previous = sync::snapshot(&app).await;
-    settings.gdrive_client_id = previous.settings.gdrive_client_id;
-    settings.gdrive_client_secret_configured = previous.settings.gdrive_client_secret_configured;
-    let cfg = sync::with_config(&app, |c| {
-        c.settings = settings;
-    })
-    .await?;
-    watcher::rebuild(&app, &cfg);
+    let state = app.state::<AppState>();
+    let mut current = state.config.lock().await;
+    settings.gdrive_client_id = current.settings.gdrive_client_id.clone();
+    settings.gdrive_client_secret_configured = current.settings.gdrive_client_secret_configured;
+    let debounce_changed = settings.debounce_seconds != current.settings.debounce_seconds;
+    let tray_changed = settings.tray_enabled != current.settings.tray_enabled;
+    if tray_changed {
+        crate::tray::set_enabled(&app, settings.tray_enabled).map_err(|e| e.to_string())?;
+    }
+    let mut cfg = current.clone();
+    cfg.settings = settings;
+    if let Err(error) = cfg.save(&state.config_path()) {
+        if tray_changed {
+            crate::tray::set_enabled(&app, current.settings.tray_enabled).map_err(|rollback| {
+                format!("{error}. Obnovenie tray nastavenia zlyhalo: {rollback}")
+            })?;
+        }
+        return Err(error);
+    }
+    *current = cfg.clone();
+    drop(current);
+    let _ = app.emit("config-changed", &cfg);
+    if debounce_changed {
+        watcher::rebuild(&app, &cfg);
+    }
     Ok(cfg)
 }
 

@@ -1,8 +1,26 @@
+use crate::AppState;
+use std::sync::atomic::Ordering;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Manager,
 };
+
+pub fn set_enabled(app: &AppHandle, enabled: bool) -> tauri::Result<()> {
+    if enabled && app.tray_by_id("main-tray").is_none() {
+        setup(app)?;
+    }
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        tray.set_visible(enabled)?;
+    }
+    if !enabled {
+        show_main_window(app);
+    }
+    app.state::<AppState>()
+        .tray_enabled
+        .store(enabled, Ordering::Relaxed);
+    Ok(())
+}
 
 /// Zobrazí a zaostrí hlavné okno (z tray ikony alebo druhej inštancie).
 pub fn show_main_window(app: &AppHandle) {
@@ -14,7 +32,7 @@ pub fn show_main_window(app: &AppHandle) {
 }
 
 /// Vytvorí tray ikonu s menu. Ľavý klik otvorí okno, pravý klik menu.
-pub fn setup(app: &AppHandle) -> tauri::Result<()> {
+fn setup(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Otvoriť Backup Sync", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Ukončiť", true, None::<&str>)?;

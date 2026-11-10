@@ -4,6 +4,16 @@ Changes are grouped by release. The Unreleased section describes work on `main` 
 
 ## Unreleased
 
+## 0.5.4 — 2026-11-10
+
+- Added an optional tray icon and background mode, disabled by default and saved in the device's local configuration. Closing the window exits the app when this mode is off.
+- Redesigned folder cards to match game cards, with folder icons, backup status, automation controls and clickable local paths.
+- Used the existing purple application icon in the sidebar.
+- Reused HTTP connection pools for cloud and artwork requests, and reused each cloud provider during a game-status refresh.
+- Avoided restarting file watchers when settings unrelated to watch timing change.
+- Preserved unsaved Settings drafts when background configuration events arrive.
+- Removed unused starter assets, the obsolete sidebar icon, an empty stylesheet and the unused frontend opener dependency.
+
 ## 0.5.3 — 2026-11-09
 
 - Kept Google Drive and Ulož.to catalogue reads from creating missing cloud directories, and streamed Ulož.to downloads to disk.

@@ -88,6 +88,7 @@ export interface ProviderStatus {
 }
 
 export interface Settings {
+  trayEnabled: boolean;
   theme: "dark" | "light";
   debounceSeconds: number;
   autoBackupFolders: boolean; // globálne automatické zálohovanie priečinkov

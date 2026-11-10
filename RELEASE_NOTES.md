@@ -1,39 +1,35 @@
-# Backup Sync v0.5.3
+# Backup Sync v0.5.4
 
-Published on November 9, 2026. This release brings a smaller Windows installer, signed in-app updates, artwork for games outside Steam, and backup reliability fixes.
+Published on November 10, 2026. This release adds optional background operation, redesigned folder cards and a focused code cleanup with connection reuse improvements.
 
 ## Changes
 
-- Reduced the Windows installer from about 222 MB to about 8.4 MB by embedding a small WebView2 bootstrapper and using zlib compression.
-- Added automatic update checks at startup and every six hours. Settings provides download progress, release notes, signature verification, and an **Install and restart** action.
-- Required updater signatures to cover the announced version. Installation is blocked while backups, restores, cloud-backup connections, or guarded item changes are active.
-- Added public Wikipedia artwork lookup alongside Steam, with automatic fallback, manual selection, and local image caching. Artwork lookup needs no login or API key.
-- Used consistent chronological ordering and filename-date fallback when reconnecting cloud games. After restoring an older save, the card can offer the newer cloud version again.
-- Prevented game and folder changes from racing with synchronization. Cloud catalogue reads use existing directories without creating missing ones.
-- Streamed Ulož.to downloads to disk and corrected custom-cloud direct listings and IPv6 loopback handling.
-- Updated the English documentation and preserved the animated README banner.
+- Added a tray and background-mode switch in Settings. It is off by default, including when an older configuration has no preference. With the switch off, closing the window exits the app. With it on, closing hides the window and monitoring continues. The choice is saved locally on each device and applies immediately.
+- Redesigned folder cards to match the game library, using folder icons, backup states, last-backup dates, automation controls and cloud actions. Clicking a folder path opens it in Explorer.
+- Reused the purple application icon in the sidebar.
+- Reused HTTP connection pools for cloud operations and artwork requests. Game cloud-status refreshes reuse one provider instance per cloud, retaining its access-token and session caches for that refresh.
+- Kept file watchers running when settings unrelated to their timing change.
+- Fixed unsaved Settings drafts being reset by background configuration updates or a tray change.
+- Removed unused starter images, an empty stylesheet, the obsolete sidebar logo and the unused JavaScript opener package. Folder opening and Google sign-in continue through the Rust opener plugin.
 
 ## Installation and updates
 
-Download `Backup.Sync_0.5.3_x64-setup.exe` and its `.sha256` checksum. The installer supports current-user Windows x64 installations and existing installation upgrades.
+Download `Backup.Sync_0.5.4_x64-setup.exe` for Windows x64, or use the update panel in an updater-capable installation such as v0.5.3. Versions up to v0.5.2 require a manual installation to gain the updater.
 
-Versions up to v0.5.2 need one manual installation to gain the in-app updater. Later updater-capable releases can be downloaded and installed through Settings.
+The installer reuses WebView2 when available. If WebView2 is missing, its bootstrapper downloads the runtime from Microsoft and needs internet access. The installer and updater feed are signed with the existing updater key. The installer has no Windows Authenticode signature, so SmartScreen may display a warning.
 
-If WebView2 is already installed, setup reuses it. If it is missing, setup requires internet access to download the runtime from Microsoft. That additional download can be around 200 MB, depending on the runtime version.
-
-The updater uses a cryptographic signature. Windows Authenticode signing is separate and the installer remains unsigned, so Windows SmartScreen may show a warning. Verify the downloaded installer with the published SHA-256 sidecar.
+This release includes the installer, its `.sig` and `.sha256` sidecars, and `latest.json`.
 
 ## Verification
 
-- Clean dependency installation and the TypeScript/Vite production build passed.
-- The default Rust suite passed 42 tests, with two live-network tests excluded from the default run. Both live Steam and Wikipedia tests were also run successfully.
-- Clippy passed with warnings denied. npm audit reported zero vulnerabilities. Cargo audit reported zero vulnerabilities and 10 upstream warnings.
-- Native Windows checks covered game creation, verified local ZIP contents, same-size edits with preserved timestamps, changes while the app was stopped, configuration persistence, window hiding, and single-instance reopening.
-- Authenticated Ulož.to checks covered backup discovery, download into an isolated directory, older-version restoration, protective ZIP contents, the newer-version card action, and restoration of the latest save.
-- An actual signed update between two isolated test builds completed through download, verification, installation, exit, and relaunch using a local test feed. Test configuration, saves, and ZIP backups were preserved.
-- A silent test installation completed in 1.56 seconds on the test PC with WebView2 already installed. Installation times depend on the machine and runtime availability.
-- Installer checksums, the public signing key, signed version, and update manifest were checked. Modified installer bytes and modified signed-version metadata were rejected.
+- Reviewed the frontend, Rust IPC handlers, configuration, synchronization, monitoring, archive protection, storage adapters, artwork and updater paths. A fresh structural graph indexed 52 code files. Unused-code reports were cross-checked against IPC registration and maintenance entry points.
+- Clean npm installation and the TypeScript/Vite production build passed. Runtime dependency and export checks found no unused frontend dependencies or exports. The standalone icon-rendering maintenance script remains available.
+- The default Rust suite passed 44 tests with two live-network tests excluded. Both live Steam and Wikipedia tests were also run successfully. Tests include archive integrity, configuration recovery, legacy configuration, tray preference persistence, cloud-version ordering, restore protection and the custom-cloud protocol against a local test server.
+- A regression test verified reuse of one HTTP connection with distinct authorization headers on successive requests.
+- Clippy passed with warnings denied. npm audit found zero vulnerabilities. Cargo audit found zero vulnerabilities and 10 upstream warnings.
+- An isolated native Windows build verified the new sidebar icon and folder layout, local snapshots for two games, exact ZIP contents after a same-size edit with its timestamp preserved, unsaved Settings drafts during background events, tray hiding, single-instance reopening and normal exit with tray disabled.
+- Release artifacts were checked for matching checksums, updater signatures, signed version and manifest URLs before publication.
 
-Authenticated Google Drive upload and restore, cloud uploads to production accounts, and first-time installation on a clean Windows machine without WebView2 were outside this release's completed validation. The custom-cloud protocol was exercised against a local HTTP test server.
+Authenticated production-cloud transfers, a new full installer upgrade cycle and first-time setup on a clean Windows machine without WebView2 were outside this release's completed validation.
 
-The release includes the installer, `.sig`, `.sha256`, and `latest.json` assets. [Download v0.5.3](https://github.com/ValentinSK0/backup-sync/releases/tag/v0.5.3)
+[Download v0.5.4](https://github.com/ValentinSK0/backup-sync/releases/tag/v0.5.4)

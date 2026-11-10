@@ -1,0 +1,43 @@
+.folder-card__header {
+  padding: 18px 20px 22px;
+  border-bottom: 1px solid #ffffff0b;
+  background: linear-gradient(145deg, #262237, #191820 75%);
+}
+
+.folder-card__identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-top: 24px;
+}
+
+.folder-card__icon {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 1px solid #a99afc30;
+  border-radius: 15px;
+  color: #c4b5fd;
+  background: #a99afc10;
+  box-shadow: inset 0 1px #ffffff09;
+}
+
+.folder-card .game-card__title {
+  margin: 7px 0 12px;
+  font-size: 23px;
+}
+
+.folder-card .game-card__automation {
+  margin-bottom: 20px;
+}
+
+.folder-card .game-card__error {
+  max-height: 130px;
+  overflow-y: auto;
+}
+
+.folder-card .game-card__secondary-actions > button {
+  white-space: normal;
+}

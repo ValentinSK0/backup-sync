@@ -5,6 +5,7 @@ pub mod ulozto;
 use crate::config::{AppConfig, Provider};
 use serde::Serialize;
 use std::path::Path;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 #[derive(Debug, Clone, Serialize)]
@@ -58,12 +59,17 @@ pub trait StorageProvider: Send + Sync {
 pub const KEYRING_SERVICE: &str = "backup-sync";
 
 pub fn http_client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    if let Some(client) = CLIENT.get() {
+        return Ok(client.clone());
+    }
+    let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(20))
         .timeout(Duration::from_secs(30 * 60))
         .user_agent(concat!("BackupSync/", env!("CARGO_PKG_VERSION")))
         .build()
-        .map_err(|e| format!("HTTP klient sa nepodarilo vytvoriť: {e}"))
+        .map_err(|e| format!("HTTP klient sa nepodarilo vytvoriť: {e}"))?;
+    Ok(CLIENT.get_or_init(|| client).clone())
 }
 
 pub fn keyring_get(key: &str) -> Result<String, String> {
@@ -132,11 +138,60 @@ pub fn make_provider(
                 .account
                 .clone()
                 .ok_or_else(|| "Chýba Ulož.to login. Prihlás sa znova.".to_string())?;
-            let auth_token = keyring_get(ulozto::AUTH_TOKEN_KEY)
-                .map_err(|_| "Ulož.to token sa nenašiel. Prihlás sa znova v Nastaveniach.".to_string())?;
+            let auth_token = keyring_get(ulozto::AUTH_TOKEN_KEY).map_err(|_| {
+                "Ulož.to token sa nenašiel. Prihlás sa znova v Nastaveniach.".to_string()
+            })?;
             let app_token = keyring_get(ulozto::APP_TOKEN_KEY)
                 .unwrap_or_else(|_| ulozto::TEST_APP_TOKEN.to_string());
             Ok(Box::new(ulozto::Ulozto::new(login, auth_token, app_token)?))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[tokio::test]
+    async fn pooled_client_reuses_connection_with_separate_request_credentials() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            for token in ["first-token", "second-token"] {
+                let mut request = Vec::new();
+                let mut buffer = [0u8; 1024];
+                while !request.windows(4).any(|part| part == b"\r\n\r\n") {
+                    let count = stream.read(&mut buffer).await.unwrap();
+                    assert_ne!(count, 0, "the connection must remain reusable");
+                    request.extend_from_slice(&buffer[..count]);
+                }
+                let headers = String::from_utf8(request).unwrap().to_ascii_lowercase();
+                assert!(headers.contains(&format!("authorization: bearer {token}\r\n")));
+                stream
+                    .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK")
+                    .await
+                    .unwrap();
+            }
+        });
+        for token in ["first-token", "second-token"] {
+            let body = http_client()
+                .unwrap()
+                .get(format!("http://{address}/"))
+                .bearer_auth(token)
+                .timeout(Duration::from_secs(5))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap();
+            assert_eq!(body, "OK");
+        }
+        tokio::time::timeout(Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap();
     }
 }

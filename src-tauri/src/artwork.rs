@@ -5,7 +5,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 
@@ -273,7 +273,11 @@ fn lookup_name(name: &str) -> String {
 }
 
 fn http_client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    if let Some(client) = CLIENT.get() {
+        return Ok(client.clone());
+    }
+    let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(8))
         .timeout(Duration::from_secs(25))
         .redirect(reqwest::redirect::Policy::none())
@@ -283,7 +287,8 @@ fn http_client() -> Result<reqwest::Client, String> {
             " (https://github.com/ValentinSK0/backup-sync)"
         ))
         .build()
-        .map_err(|_| "Nepodarilo sa pripraviť pripojenie ku katalógu obrázkov.".into())
+        .map_err(|_| "Nepodarilo sa pripraviť pripojenie ku katalógu obrázkov.".to_string())?;
+    Ok(CLIENT.get_or_init(|| client).clone())
 }
 
 fn valid_media_url(value: &str) -> bool {

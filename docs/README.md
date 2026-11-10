@@ -22,7 +22,7 @@ The React frontend calls registered Tauri commands. Rust owns persisted configur
 - Game backups produce verified local ZIP snapshots and can upload them as separate cloud versions.
 - Each game or folder selects one provider, with per-item overrides for automatic cloud operations.
 - The dashboard summarizes existing state and the latest 20 session events. Its activity feed resets when the app restarts.
-- Closing the main window keeps the process running in the system tray. Monitoring stops when the process exits.
+- The tray icon is off by default. Enable background operation in Settings to keep monitoring after the window closes. The preference is stored locally in `config.json`. With tray disabled, closing the window exits the process and stops monitoring.
 
 ## Source map
 

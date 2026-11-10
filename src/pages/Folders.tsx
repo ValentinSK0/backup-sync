@@ -4,6 +4,7 @@ import {
   backupFolderNow,
   connectFolderBackup,
   listFolderBackups,
+  openLocalFolder,
   pickFolder,
   removeWatchedFolder,
   restoreFolderFromCloud,
@@ -11,26 +12,21 @@ import {
 } from "../api";
 import { ConfirmDialog, Modal } from "../components/Modal";
 import ProviderMenu from "../components/ProviderMenu";
-import StateBadge from "../components/StateBadge";
+import FolderCard from "../components/FolderCard";
 import {
   DownloadIcon,
   FolderIcon,
   LinkIcon,
   PlusIcon,
   SpinnerIcon,
-  TrashIcon,
-  UploadIcon,
 } from "../components/icons";
 import {
   Button,
-  Card,
   EmptyState,
   PageHeader,
-  inputCls,
 } from "../components/ui";
 import { useApp } from "../context";
 import {
-  baseName,
   errMsg,
   formatBytes,
   formatDate,
@@ -38,18 +34,6 @@ import {
 } from "../format";
 import { useConfigAction } from "../hooks";
 import type { CloudFolderBackup, Provider, WatchedFolder } from "../types";
-
-type AutoBackupOption = "inherit" | "on" | "off";
-
-function autoBackupToOption(value: boolean | null): AutoBackupOption {
-  if (value === null) return "inherit";
-  return value ? "on" : "off";
-}
-
-function optionToAutoBackup(option: AutoBackupOption): boolean | null {
-  if (option === "inherit") return null;
-  return option === "on";
-}
 
 function ConnectCloudBackupModal({
   provider,
@@ -249,7 +233,7 @@ function ConnectCloudBackupModal({
 }
 
 export default function Folders() {
-  const { config } = useApp();
+  const { config, toast } = useApp();
   const { busy, run } = useConfigAction();
   const [toRemove, setToRemove] = useState<WatchedFolder | null>(null);
   const [toRestore, setToRestore] = useState<WatchedFolder | null>(null);
@@ -322,151 +306,30 @@ export default function Folders() {
           hint="Kliknite na „Pridať priečinok“ a vyberte, čo chcete zálohovať."
         />
       ) : (
-        <div className="flex flex-col gap-3">
-          {folders.map((f) => (
-            <Card key={f.id} className="overflow-hidden">
-              <div className="flex items-start gap-4 px-5 py-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-indigo-500/10 bg-indigo-600/15 text-indigo-400">
-                  <FolderIcon className="h-6 w-6" />
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <div
-                      className="min-w-0 truncate text-sm font-semibold text-zinc-100"
-                      title={f.path}
-                    >
-                      {baseName(f.path)}
-                    </div>
-                    <StateBadge state={f.syncState} />
-                  </div>
-                  <div
-                    className="mt-1 truncate font-mono text-xs text-zinc-500"
-                    title={f.path}
-                  >
-                    {f.path}
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
-                    <span>{providerLabel(f.provider)}</span>
-                    <span className="hidden h-1 w-1 rounded-full bg-zinc-700 sm:block" />
-                    <span>Posledná záloha: {formatDate(f.lastSync)}</span>
-                  </div>
-                  {f.lastError && (
-                    <div className="mt-3 break-words rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
-                      {f.lastError}
-                    </div>
-                  )}
-                </div>
-
-                <Button
-                  variant="ghost"
-                  className="-mr-2 !p-2 text-zinc-500 hover:!bg-red-500/10 hover:!text-red-400"
-                  onClick={() => setToRemove(f)}
-                  aria-label="Odstrániť priečinok"
-                  title="Odstrániť priečinok"
-                >
-                  <TrashIcon className="h-4.5 w-4.5" />
-                </Button>
-              </div>
-
-              <div className="grid gap-3 border-t border-zinc-800 bg-zinc-950/25 px-5 py-3.5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-                <div className="flex min-w-0 flex-wrap items-center gap-3">
-                  <div className="min-w-36">
-                    <label
-                      className="block text-xs font-medium text-zinc-300"
-                      htmlFor={`auto-backup-${f.id}`}
-                    >
-                      Automatické zálohovanie
-                    </label>
-                    <div className="mt-0.5 text-[11px] text-zinc-600">
-                      Nahrá zmeny bez klikania
-                    </div>
-                  </div>
-                  <select
-                    id={`auto-backup-${f.id}`}
-                    className={`${inputCls} !w-44 !py-1.5 text-xs`}
-                    value={autoBackupToOption(f.autoBackup)}
-                    disabled={busy !== null}
-                    onChange={(e) => {
-                      const value = optionToAutoBackup(
-                        e.currentTarget.value as AutoBackupOption,
-                      );
-                      void run(`auto:${f.id}`, () =>
-                        setFolderAutoBackup(f.id, value),
-                      );
-                    }}
-                    title="Automatické zálohovanie priečinka"
-                  >
-                    <option value="inherit">Dediť globálne</option>
-                    <option value="on">Zapnuté</option>
-                    <option value="off">Vypnuté</option>
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
-                  <Button
-                    className="whitespace-nowrap"
-                    variant={
-                      f.syncState === "error" &&
-                      f.lastErrorAction === "download"
-                        ? "primary"
-                        : "secondary"
-                    }
-                    loading={busy === `download:${f.id}`}
-                    disabled={
-                      (busy !== null && busy !== `download:${f.id}`) ||
-                      (f.syncState === "syncing" &&
-                        busy !== `download:${f.id}`)
-                    }
-                    onClick={() => setToRestore(f)}
-                    title="Prepísať lokálne súbory verziou z cloudu"
-                  >
-                    <DownloadIcon className="h-4 w-4" />
-                    {f.syncState === "error" &&
-                    f.lastErrorAction === "download"
-                      ? "Stiahnuť znova"
-                      : "Stiahnuť"}
-                  </Button>
-
-                  <Button
-                    className="whitespace-nowrap"
-                    variant={
-                      f.syncState === "changed" ||
-                      (f.syncState === "error" &&
-                        f.lastErrorAction === "upload")
-                        ? "primary"
-                        : "secondary"
-                    }
-                    loading={
-                      busy === `backup:${f.id}` ||
-                      (f.syncState === "syncing" &&
-                        busy !== `download:${f.id}`)
-                    }
-                    disabled={
-                      (busy !== null && busy !== `backup:${f.id}`) ||
-                      f.syncState === "syncing"
-                    }
-                    onClick={() =>
-                      run(
-                        `backup:${f.id}`,
-                        () => backupFolderNow(f.id),
-                        "Záloha dokončená.",
-                      )
-                    }
-                  >
-                    <UploadIcon className="h-4 w-4" />
-                    {f.syncState === "error" &&
-                    f.lastErrorAction === "upload"
-                      ? "Zálohovať znova"
-                      : f.syncState === "syncing"
-                        ? "Prebieha…"
-                        : "Zálohovať teraz"}
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
+        <section className="games-library" aria-label="Sledované priečinky">
+          <div className="games-library__heading">
+            Tvoje priečinky <span>{folders.length}</span>
+          </div>
+          <div className="games-library__cards">
+            {folders.map((folder) => (
+              <FolderCard
+                key={folder.id}
+                folder={folder}
+                busy={busy}
+                globalAutoBackup={config.settings.autoBackupFolders}
+                onOpenFolder={() => void openLocalFolder(folder.path).catch((error) => toast("error", errMsg(error)))}
+                onRemove={() => setToRemove(folder)}
+                onRestore={() => setToRestore(folder)}
+                onAutoBackup={(value) => void run(
+                  `auto:${folder.id}`, () => setFolderAutoBackup(folder.id, value),
+                )}
+                onBackup={() => void run(
+                  `backup:${folder.id}`, () => backupFolderNow(folder.id), "Záloha dokončená.",
+                )}
+              />
+            ))}
+          </div>
+        </section>
       )}
 
       {connectProvider && (

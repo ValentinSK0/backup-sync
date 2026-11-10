@@ -15,16 +15,6 @@ function svgProps(className: string | undefined) {
   };
 }
 
-export function LogoIcon({ className }: IconProps) {
-  return (
-    <svg {...svgProps(className)} strokeWidth={1.6}>
-      <path d="M17.5 18.5H7a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 10.5a4 4 0 0 1-.5 8Z" />
-      <path d="M12 15.5v-5" />
-      <path d="m9.8 12.7 2.2-2.2 2.2 2.2" />
-    </svg>
-  );
-}
-
 export function HomeIcon({ className }: IconProps) {
   return (
     <svg {...svgProps(className)}>

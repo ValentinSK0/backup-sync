@@ -3,7 +3,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Provider {
     #[serde(rename = "gdrive")]
     Gdrive,
@@ -148,6 +148,8 @@ pub struct Providers {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
+    #[serde(default)]
+    pub tray_enabled: bool,
     #[serde(default = "default_theme")]
     pub theme: String,
     #[serde(default = "default_debounce")]
@@ -183,6 +185,7 @@ fn default_gdrive_client_id() -> String {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            tray_enabled: false,
             theme: default_theme(),
             debounce_seconds: default_debounce(),
             auto_backup_folders: false,
@@ -369,6 +372,24 @@ mod tests {
         assert_eq!(folder.auto_backup, None);
         assert_eq!(folder.last_error_action, None);
         assert!(!config.settings.auto_backup_folders);
+        assert!(!config.settings.tray_enabled);
+        let legacy: AppConfig = serde_json::from_str(r#"{"settings":{"theme":"dark"}}"#).unwrap();
+        assert!(!legacy.settings.tray_enabled);
+        assert!(!Settings::default().tray_enabled);
+    }
+
+    #[test]
+    fn tray_preference_survives_config_reload() {
+        let root =
+            std::env::temp_dir().join(format!("backup-sync-tray-test-{}", uuid::Uuid::new_v4()));
+        let path = root.join("config.json");
+        let mut config = AppConfig::default();
+        for enabled in [false, true, false] {
+            config.settings.tray_enabled = enabled;
+            config.save(&path).unwrap();
+            assert_eq!(AppConfig::load(&path).settings.tray_enabled, enabled);
+        }
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

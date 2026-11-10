@@ -26,6 +26,7 @@ pub struct AppState {
     pub active_syncs: Arc<StdMutex<HashSet<String>>>,
     pub pending_changes: Arc<StdMutex<HashSet<String>>>,
     pub watcher_stop: StdMutex<Option<Arc<AtomicBool>>>,
+    pub tray_enabled: AtomicBool,
 }
 
 impl AppState {
@@ -48,10 +49,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(updater::UpdateState::default())
-        // zatvorenie okna appku neukončí, iba schová do tray
+        // Keep the window accessible when background mode is enabled.
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" {
+                if window.label() == "main"
+                    && window.app_handle().state::<AppState>().tray_enabled.load(
+                        std::sync::atomic::Ordering::Relaxed,
+                    )
+                {
                     api.prevent_close();
                     let _ = window.hide();
                 }
@@ -111,9 +116,10 @@ pub fn run() {
                 active_syncs: Arc::new(StdMutex::new(HashSet::new())),
                 pending_changes: Arc::new(StdMutex::new(HashSet::new())),
                 watcher_stop: StdMutex::new(None),
+                tray_enabled: AtomicBool::new(false),
             };
             app.manage(state);
-            tray::setup(app.handle())?;
+            tray::set_enabled(app.handle(), cfg.settings.tray_enabled)?;
             watcher::rebuild(app.handle(), &cfg);
             Ok(())
         })

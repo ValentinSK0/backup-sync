@@ -1,10 +1,10 @@
 import type { Page } from "../App";
+import appIcon from "../../src-tauri/icons/128x128.png";
 import { useApp } from "../context";
 import {
   FolderIcon,
   GamepadIcon,
   HomeIcon,
-  LogoIcon,
   SettingsIcon,
 } from "./icons";
 
@@ -33,9 +33,7 @@ export default function Sidebar({
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-zinc-800 bg-zinc-950 px-3 py-4">
       <div className="mb-6 flex items-center gap-2.5 px-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600/20 text-indigo-400">
-          <LogoIcon className="h-5.5 w-5.5" />
-        </div>
+        <img src={appIcon} alt="" aria-hidden="true" className="h-9 w-9 shrink-0 object-contain" />
         <div>
           <div className="text-sm font-semibold leading-tight text-zinc-100">
             Backup Sync

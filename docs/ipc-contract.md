@@ -20,7 +20,7 @@ type ArtworkSource = "steam" | "wikipedia";
 | `WatchedFolder` | Local path, provider, stable cloud ID/name, automation override, synchronization state, last sync, and last error/action |
 | `Game` | Display name, save path, local backup path, stable cloud name, provider, upload override, state, last change/upload/cloud version, local snapshot state, and artwork |
 | `Game.local` | Observed, backup, and uploaded fingerprints plus last backup/check times, backup filename, and watcher error |
-| `Settings` | Theme, debounce seconds, global folder/game automation, compression, public Google Client ID, and Client Secret configured flag |
+| `Settings` | Theme, `trayEnabled` (defaults to false), debounce seconds, global folder/game automation, compression, public Google Client ID, and Client Secret configured flag |
 | `ProviderStatus` | Connected flag, account label, endpoint where applicable, and provider error |
 | `GameCloudStatus` | Game ID, newer-version flag, and latest known cloud timestamp |
 | `VersionInfo` | Cloud file ID, filename, nullable `createdAt`, and `sizeBytes` |

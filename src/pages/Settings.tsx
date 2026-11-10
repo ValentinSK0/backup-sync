@@ -94,9 +94,17 @@ export default function Settings() {
     setAutoUpload(settings.autoUploadSaves);
     setCompression(settings.compressionLevel);
     setDebounce(String(settings.debounceSeconds));
+  }, [
+    settings.autoBackupFolders,
+    settings.autoUploadSaves,
+    settings.compressionLevel,
+    settings.debounceSeconds,
+  ]);
+
+  useEffect(() => {
     setClientId(settings.gdriveClientId);
     setClientSecret("");
-  }, [settings]);
+  }, [settings.gdriveClientId, settings.gdriveClientSecretConfigured]);
 
   const backupDirty =
     autoBackupFolders !== settings.autoBackupFolders ||
@@ -230,6 +238,32 @@ export default function Settings() {
 
       <div className="flex max-w-2xl flex-col gap-5">
         <AppUpdateCard />
+        <Section
+          title="Beh na pozadí"
+          description="Nastavenie sa automaticky uloží na tomto zariadení."
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div id="tray-label" className="text-sm text-zinc-200">
+                Zobraziť ikonu v tray a ponechať aplikáciu na pozadí
+              </div>
+              <p className="mt-1 text-xs text-zinc-500">
+                Pri zapnutí sa okno krížikom skryje a zálohovanie pokračuje.
+                Pri vypnutí sa aplikácia krížikom ukončí. Predvolene vypnuté.
+              </p>
+            </div>
+            <Toggle
+              labelledBy="tray-label"
+              checked={settings.trayEnabled}
+              disabled={busy !== null}
+              onChange={(enabled) => void run(
+                "saveTray",
+                () => updateSettings({ ...settings, trayEnabled: enabled }),
+                "Nastavenie behu na pozadí uložené.",
+              )}
+            />
+          </div>
+        </Section>
         <Section
           title="Zálohovanie"
           description="Správanie automatického nahrávania a kompresie záloh."
