@@ -7,6 +7,7 @@ These guides describe the current `main` branch. For features in a downloaded in
 | Guide | Purpose |
 | --- | --- |
 | [App overview and setup](../README.md) | Installation, first backup, provider setup, and everyday use |
+| [Ulož.to Disk setup](ulozto-setup.md) | Account registration, personal application token creation, sign-in and the first cloud backup |
 | [Backup behavior and verification](game-save-verification.md) | Local snapshots, cloud versions, restore behavior, regression coverage, and manual acceptance checks |
 | [Artwork providers](artwork.md) | Automatic lookup, manual image selection, caching, and provider limits |
 | [Custom cloud API](custom-cloud-api.md) | REST endpoints and storage semantics required by a compatible server |

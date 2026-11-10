@@ -139,6 +139,8 @@ Access follows the OAuth project's publishing status and permitted users. Config
 
 ### Ulož.to Disk
 
+**Follow the step-by-step guide to create an account, generate an application token and connect Backup Sync.** [Ulož.to Disk setup tutorial](docs/ulozto-setup.md)
+
 In **Settings** (`Nastavenia`), enter your login and an application login token generated in your Ulož.to account settings.
 
 You can supply your own application API key obtained from Ulož.to support. Otherwise, the app uses the public test application key documented in the source, which may change or stop working. Uploads use the provider's chunked API, with retries for failed chunks.
